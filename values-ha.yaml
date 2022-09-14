@@ -1,0 +1,266 @@
+########################################################
+#################### AR CLOUD (HA) #####################
+########################################################
+
+############
+# SERVICES #
+############
+
+opa-istio-device:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 3Gi
+
+minio:
+  gateway: "gcs" # TODO: "azure", "gcs", "nas", or "s3"
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 2
+        memory: 2Gi
+      # limits:
+      #   cpu: 4
+      #   memory: 6Gi
+  job:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 512Mi
+      # limits:
+      #   cpu: 1
+      #   memory: 1Gi
+
+nats:
+  nats:
+    resources:
+      requests:
+        cpu: 2
+        memory: 4Gi
+      # limits:
+      #   cpu: 6
+      #   memory: 10Gi
+  cluster:
+    enabled: true
+    replicas: 3
+
+postgresql:
+  enabled: false
+  resources:
+    requests:
+      cpu: 2
+      memory: 4Gi
+    # limits:
+    #   cpu: 4
+    #   memory: 10Gi
+
+############
+# BACKENDS #
+############
+
+device-gateway:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+  migrations:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 512Mi
+      # limits:
+      #   cpu: 1
+      #   memory: 1Gi
+
+identity-backend:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+  migrations:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 512Mi
+      # limits:
+      #   cpu: 1
+      #   memory: 1Gi
+
+keycloak:
+  statefulset:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 2Gi
+      # limits:
+      #   cpu: 4
+      #   memory: 4Gi
+  migrations:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 512Mi
+      # limits:
+      #   cpu: 1
+      #   memory: 1Gi
+  extraEnv: |
+    - name: JGROUPS_DISCOVERY_PROTOCOL
+      value: kubernetes.KUBE_PING
+    - name: KUBERNETES_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: CACHE_OWNERS_COUNT
+      value: "3"
+    - name: CACHE_OWNERS_AUTH_SESSIONS_COUNT
+      value: "3"
+  rbac:
+    create: true
+    rules:
+      - apiGroups:
+          - ""
+        resources:
+          - pods
+        verbs:
+          - get
+          - list
+
+mapping:
+  meshing:
+    resources:
+      requests:
+        cpu: 2
+        memory: 4Gi
+      # limits:
+      #   cpu: 4
+      #   memory: 8Gi
+    scratchVolume:
+      storageSize: 50Gi
+  spiff:
+    resources:
+      requests:
+        cpu: 2
+        memory: 4Gi
+      # limits:
+      #   cpu: 4
+      #   memory: 8Gi
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+  watchdog:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 512Mi
+      # limits:
+      #   cpu: 1
+      #   memory: 1Gi
+  worker:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
+migration:
+  migrations:
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 512Mi
+      # limits:
+      #   cpu: 1
+      #   memory: 2Gi
+
+session-manager:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
+spatial-anchors:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
+streaming:
+  spiff:
+    resources:
+      requests:
+        cpu: 2
+        memory: 4Gi
+      # limits:
+      #   cpu: 4
+      #   memory: 8Gi
+  statefulset:
+    replicas: 4
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
+space-proxy:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
+#############
+# FRONTENDS #
+#############
+
+enterprise-console-web:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi

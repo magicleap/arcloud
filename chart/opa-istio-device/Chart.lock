@@ -1,0 +1,6 @@
+dependencies:
+- name: opa-istio-namespace
+  repository: https://registry.magicleap.io/chartrepo/enterprise/
+  version: 3.0.1
+digest: sha256:24e7f70aee0e7ad23ddaa49eb91c431c4b108b4fca55182aad2986b659db79ab
+generated: "2022-07-20T19:14:10.033125688Z"

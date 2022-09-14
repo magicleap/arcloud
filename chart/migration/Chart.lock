@@ -1,0 +1,6 @@
+dependencies:
+- name: migration
+  repository: https://registry.magicleap.io/chartrepo/connected-services/
+  version: 0.8.2
+digest: sha256:fbafa3acfb49a72c90a7d2b091b89cbaf7b9748c5c682f897dc713379ea524a0
+generated: "2022-09-13T16:40:09.344128941Z"

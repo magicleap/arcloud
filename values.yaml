@@ -1,0 +1,623 @@
+########################################################
+####################### AR CLOUD #######################
+########################################################
+
+global:
+  version: 0.39.11
+  namespace: arcloud
+  domainProtocol: https
+  mqttPort: 8883
+  mqttProtocol: ssl
+  domain: localhost
+  domainPrefix: ""
+  annotations: {}
+  image:
+    registry: quay.io/magicleap
+  imagePullSecrets:
+    - name: container-registry
+  istio:
+    virtualService:
+      gateways:
+        - istio-system/istio-gateway
+  nats:
+    host: nats
+    port: 4222
+    clusterID: arcloud
+    enableJetStream: true # TODO (MH): Remove w/ STAN
+  postgresql:
+    host: postgresql
+    port: 5432
+  minio:
+    endpoint: http://minio:80
+  bucket: arcloud
+  deviceGateway:
+    bucket: device-gateway
+    http:
+      port: 8289
+  features:
+    mapMerge: true
+    spaceMeshing: false
+
+#############
+# TEMPLATES #
+#############
+
+x-annotations: &annotations |
+  {{- with .Values.global.annotations }}
+  {{ toYaml . }}
+  {{- end }}
+
+x-imagePullSecrets: &imagePullSecrets |
+  {{- with .Values.global.imagePullSecrets }}
+  {{ toYaml . }}
+  {{- end }}
+
+x-securityContext: &securityContext
+  runAsNonRoot: true
+  runAsUser: 1000
+
+x-jwtRuleKeycloak: &jwtRuleKeycloak
+  issuer: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}/auth/realms/magicleap"
+  jwksUri: "http://keycloak.{{ .Values.global.namespace }}.svc.cluster.local/auth/realms/magicleap/protocol/openid-connect/certs"
+  outputPayloadToHeader: jwt-payload
+  forwardOriginalToken: false
+
+x-jwtRuleDevice: &jwtRuleDevice
+  issuer: ml-connected-services
+  audiences:
+    - device_identity
+  jwksUri: "http://device-gateway.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.global.deviceGateway.http.port }}/v0/jwks"
+  fromHeaders:
+    - name: x-device-identity-token
+  outputPayloadToHeader: device-jwt-payload
+  forwardOriginalToken: false
+
+x-jwtRules: &jwtRules
+  - *jwtRuleKeycloak
+  - *jwtRuleDevice
+
+x-istioGateways: &istioGateways |
+  {{- range .Values.global.istio.virtualService.gateways }}
+  - {{.}}
+  {{- end }}
+
+x-istio: &istio
+  hosts:
+    - "{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}"
+  requestAuthentication:
+    enabled: true
+    jwtRules: *jwtRules
+
+x-opaIstio: &opaIstio
+  image: &opaIstioImage
+    repository: "{{ .Values.global.image.registry }}/opa"
+  extraArgs: &opaIstioExtraArgs
+  - --set=decision_logs.console=true
+
+x-scuttle: &scuttle
+  image:
+    repository: "{{ .Values.global.image.registry }}/scuttle"
+
+x-kubexit: &kubexit
+  image:
+    repository: "{{ .Values.global.image.registry }}/kubexit"
+
+x-serviceAccount: &serviceAccount
+  create: true
+
+
+############
+# SERVICES #
+############
+
+opa-istio-device:
+  image: *opaIstioImage
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    replicas: 1
+    extraArgs: *opaIstioExtraArgs
+  scuttle: *scuttle
+  kubexit: *kubexit
+
+minio:
+  image:
+    repository: "{{ .Values.global.image.registry }}/minio"
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  statefulset:
+    replicas: 1
+  job:
+    image:
+      repository: "{{ .Values.global.image.registry }}/mc"
+  scuttle: *scuttle
+  kubexit: *kubexit
+  accessKey: "" # Defaults to a random alpha numeric 20 character value
+  secretKey: "" # Defaults to a random alpha numeric 40 character value
+  istio:
+    virtualService:
+        enabled: true 
+  buckets:
+    - name: "{{ $.Values.global.deviceGateway.bucket }}"
+      policy: none
+      purge: false
+    - name: "{{ $.Values.global.bucket }}"
+      policy: none
+      purge: false
+      ilmConfig: |
+        {
+            "Rules": [
+                {
+                    "Expiration": {
+                        "Days": 30
+                    },
+                    "Filter": {
+                        "Prefix": "support/"
+                    },
+                    "ID": "ArcloudFiles",
+                    "Status": "Enabled"
+                }
+            ]
+        }
+    - name: loki
+      policy: none
+      purge: false
+      ilmConfig: |
+        {
+            "Rules": [
+                {
+                    "Expiration": {
+                        "Days": 60
+                    },
+                    "ID": "LokiFiles",
+                    "Status": "Enabled"
+                }
+            ]
+        }
+    - name: tempo
+      policy: none
+      purge: false
+      ilmConfig: |
+        {
+            "Rules": [
+                {
+                    "Expiration": {
+                        "Days": 15
+                    },
+                    "ID": "TempoFiles",
+                    "Status": "Enabled"
+                }
+            ]
+        }
+  persistence:
+    storageSize: 30Gi
+
+nats:
+  nats:
+    jetstream:
+      enabled: true
+      fileStorage:
+        enabled: true
+        size: 10Gi
+  natsbox:
+    enabled: false
+
+postgresql:
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  databases:
+    - arcloud
+    - device_session
+    - devices_service
+    - keycloak
+    - identity
+  username: postgres
+  password: "" # Defaults to random alpha numeric 32 character value
+  persistence:
+    size: 10Gi
+
+############
+# BACKENDS #
+############
+
+device-gateway:
+  image:
+    repository: "{{ .Values.global.image.registry }}/device-gateway"
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  migrations:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  service:
+    deviceGateway:
+      http:
+        port: "{{ .Values.global.deviceGateway.http.port }}"
+  istio:
+    <<: *istio
+    # NOTE: Device Gateway only needs the Keycloak JWKS rule, since it serves the device JWKS rule to Istio.
+    requestAuthentication:
+      enabled: true
+      jwtRules:
+        - *jwtRuleKeycloak
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      deviceGateway:
+        mqtt:
+          ports:
+          - "{{ .Values.global.mqttPort }}"
+        http:
+          uriPrefix: /api/device-gateway/
+          rewriteUri: /
+      devices:
+        uriPrefix: /api/devices/
+        rewriteUri: /
+      crashReport:
+        uriPrefix: /api/crash-report/
+        rewriteUri: /
+  opaIstio: *opaIstio
+  serviceAccount:
+    create: true
+  logger:
+    backend: JSON
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: device_session
+    existingSecret: postgresql
+  devicesPostgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: devices_service
+    existingSecret: postgresql
+  deviceGateway:
+    secureUrl: "{{ .Values.global.mqttProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}:{{ .Values.global.mqttPort }}"
+    crashServiceUrl: '{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}{{ .Values.istio.virtualService.crashReport.uriPrefix | trimSuffix "/" }}'
+    mappingServiceUrl: '{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}{{ eq .Values.global.domainProtocol "http" | ternary ":80" (eq .Values.global.domainProtocol "https" | ternary ":443" "") }}'
+    sessionManagerServiceUrl: '{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}{{ eq .Values.global.domainProtocol "http" | ternary ":80" (eq .Values.global.domainProtocol "https" | ternary ":443" "") }}'
+    streamingServiceUrl: '{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}{{ eq .Values.global.domainProtocol "http" | ternary ":80" (eq .Values.global.domainProtocol "https" | ternary ":443" "") }}'
+    spatialAnchorsServiceUrl: '{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}{{ eq .Values.global.domainProtocol "http" | ternary ":80" (eq .Values.global.domainProtocol "https" | ternary ":443" "") }}'
+    objectServiceUrl: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}/api/objects" # TODO: Need to expose an object service
+    scram:
+      salt: "" # Defaults to a random alpha numeric 24 character value
+      password: "" # Defaults to a base64 encoded string of 43 random bytes
+    deviceSessionTokenKey: "" # Defaults to a random RSA private key
+  fileService:
+    backend: aws
+    existingSecret: minio
+    s3:
+      scheme: http://
+      host: minio
+      port: 80
+    bugReportBucket:
+      name: "{{ .Values.global.deviceGateway.bucket }}"
+    crashReportBucket:
+      name: "{{ .Values.global.deviceGateway.bucket }}"
+    calibrationBucket:
+      name: "{{ .Values.global.deviceGateway.bucket }}"
+
+identity-backend:
+  image:
+    repository: "{{ .Values.global.image.registry }}/identity-backend"
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  migrations:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /api/identity/
+      rewriteUri: /
+  opaIstio: *opaIstio
+  basePath: /api/identity/
+  deploymentBundle: arcloud
+  websiteUrl: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}"
+  smtp:
+    host: "{{ .Values.global.domainPrefix }}smtp.{{ .Values.global.domain }}"
+    port: 25
+    fromDisplayName: "Arcloud"
+    from: "no-reply@{{ .Values.global.domain }}"
+  defaultUser:
+    username: aradmin
+    email: "aradmin@{{ .Values.global.domain }}"
+    password: "" # Defaults to a random alpha numeric 32 character value
+    givenName: Arcloud
+    familyName: Administrator
+    roles:
+      - default-roles-magicleap
+      - magicleap_admin
+  serviceAccount: *serviceAccount
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: identity
+    existingSecret: postgresql
+  keycloak:
+    url: http://keycloak/auth
+    existingSecret: keycloak-identity
+
+keycloak:
+  image:
+    repository: "{{ .Values.global.image.registry }}/keycloak"
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  statefulset:
+    securityContext: *securityContext
+  migrations:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    requestAuthentication:
+      enabled: false
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /auth/
+  serviceAccount: *serviceAccount
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: keycloak
+    existingSecret: postgresql
+  frontendUrl: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}/auth"
+  proxyAddressForwarding: true
+  username: admin
+  password: "" # Defaults to a random alpha numeric 32 character value
+  identity:
+    clientId: com.magicleap.api.identity
+    clientSecret: "" # Defaults to a random uuid v4 value
+
+mapping:
+  image:
+    repository: "{{ .Values.global.image.registry }}/mapping"
+  meshing:
+    enabled: "{{ .Values.global.features.spaceMeshing }}"
+    image:
+      repository: "{{ .Values.global.image.registry }}/meshing"
+  spiff:
+    image:
+      repository: "{{ .Values.global.image.registry }}/spiff"
+  log:
+    level: DEBUG
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  watchdog:
+    securityContext: *securityContext
+  worker:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      grpc:
+        uriPrefix: /ARCloud.Mapping/
+      http:
+        uriPrefix: /api/mapping/
+        rewriteUri: /
+  opaIstio: *opaIstio
+  serviceAccount:
+    create: true
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: arcloud
+    existingSecret: postgresql
+  minio:
+    endpoint: "{{ .Values.global.minio.endpoint }}"
+    bucket: "{{ $.Values.global.bucket }}"
+    existingSecret: minio
+  nats:
+    host: "{{ .Values.global.nats.host }}"
+    port: "{{ .Values.global.nats.port }}"
+    clusterId: "{{ $.Values.global.nats.clusterID }}"
+    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
+  tracing:
+    enabled: false
+
+migration:
+  image:
+    repository: "{{ .Values.global.image.registry }}/migration"
+  log:
+    level: DEBUG
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  migrations:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  serviceAccount:
+    create: true
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: arcloud
+    existingSecret: postgresql
+
+session-manager:
+  image:
+    repository: "{{ .Values.global.image.registry }}/session-manager"
+  log:
+    level: DEBUG
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /ARCloud.SessionManager/
+  opaIstio: *opaIstio
+  serviceAccount:
+    create: true
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: arcloud
+    existingSecret: postgresql
+  nats:
+    host: "{{ .Values.global.nats.host }}"
+    port: "{{ .Values.global.nats.port }}"
+    clusterId: "{{ $.Values.global.nats.clusterID }}"
+    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
+
+spatial-anchors:
+  image:
+    repository: "{{ .Values.global.image.registry }}/spatial-anchors"
+  log:
+    level: DEBUG
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /ARCloud.SpatialAnchors/
+  opaIstio: *opaIstio
+  serviceAccount:
+    create: true
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: arcloud
+    existingSecret: postgresql
+  nats:
+    host: "{{ .Values.global.nats.host }}"
+    port: "{{ .Values.global.nats.port }}"
+    clusterId: "{{ $.Values.global.nats.clusterID }}"
+    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
+
+streaming:
+  image:
+    repository: "{{ .Values.global.image.registry }}/streaming"
+  spiff:
+    image:
+      repository: "{{ .Values.global.image.registry }}/spiff"
+  log:
+    level: DEBUG
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  statefulset:
+    replicas: 4
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /ARCloud.StreamingService/
+  opaIstio: *opaIstio
+  serviceAccount:
+    create: true
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: arcloud
+    existingSecret: postgresql
+  minio:
+    endpoint: "{{ .Values.global.minio.endpoint }}"
+    bucket: "{{ $.Values.global.bucket }}"
+    existingSecret: minio
+  nats:
+    host: "{{ .Values.global.nats.host }}"
+    port: "{{ .Values.global.nats.port }}"
+    clusterId: "{{ $.Values.global.nats.clusterID }}"
+    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
+  server:
+    streamscheck:
+      tickerDurationSec: 300
+
+space-proxy:
+  image:
+    repository: "{{ .Values.global.image.registry }}/space-proxy"
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /ARCloud.SpaceWorkerService/
+  opaIstio: *opaIstio
+  serviceAccount:
+    create: true
+  proxy:
+    targetPort: 52000
+  postgresql:
+    host: "{{ .Values.global.postgresql.host }}"
+    port: "{{ .Values.global.postgresql.port }}"
+    database: arcloud
+    existingSecret: postgresql
+
+#############
+# FRONTENDS #
+#############
+
+enterprise-console-web:
+  image:
+    repository: "{{ .Values.global.image.registry }}/enterprise-console-web"
+  imagePullSecrets: *imagePullSecrets
+  annotations: *annotations
+  deployment:
+    securityContext: *securityContext
+  scuttle: *scuttle
+  kubexit: *kubexit
+  istio:
+    <<: *istio
+    virtualService:
+      enabled: true
+      gateways: *istioGateways
+      uriPrefix: /
+  opaIstio: *opaIstio
+  # TODO: Create first class Next-Auth properties
+  extraEnv: |
+    - name: AR_API_URL
+      value: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}/api"
+    - name: KEYCLOAK_CLIENT_ID
+      value: com.magicleap.web.enterpriseportal
+    - name: KEYCLOAK_DOMAIN
+      value: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}/auth/realms/magicleap/protocol/openid-connect"
+    - name: KEYCLOAK_DOMAIN_INTERNAL
+      value: http://keycloak/auth/realms/magicleap/protocol/openid-connect
+    - name: NEXTAUTH_URL
+      value: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}"
+    - name: QR_CODE_PORT
+      value: "{{ .Values.global.mqttPort }}"
+    - name: QR_CODE_PROTOCOL
+      value: "{{ .Values.global.mqttProtocol }}"
+    - name: ARCLOUD_BUNDLE_VERSION
+      value: "{{ .Values.global.version }}"
+    - name: ARCLOUD_FEATURES_MAPMERGE
+      value: "{{ .Values.global.features.mapMerge | toString }}"
+    - name: ARCLOUD_FEATURES_SPACE_MESHING
+      value: "{{ .Values.global.features.spaceMeshing | toString }}"

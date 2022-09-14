@@ -1,0 +1,6 @@
+dependencies:
+- name: keycloak
+  repository: https://registry.magicleap.io/chartrepo/enterprise/
+  version: 1.18.3
+digest: sha256:8c2553d06095f86db3d0412064c230eb77ed7035dbe4436741b769877f6a03af
+generated: "2022-08-23T20:02:49.766676328Z"

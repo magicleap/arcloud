@@ -1,0 +1,762 @@
+########################################################
+####################### AR CLOUD #######################
+########################################################
+
+############
+# BACKENDS #
+############
+
+device-gateway:
+  extraEnv: |
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://opentelemetry-collector:4318"
+
+mapping:
+  tracing:
+    enabled: true
+    endpoint: "opentelemetry-collector:4317"
+    insecure: true
+
+#################
+# OBSERVABILITY #
+#################
+
+grafana:
+  # NOTE: This chart only supports a single replica w/ persistence
+  replicas: 1
+  useStatefulSet: true
+  # headlessService: true
+  persistence:
+    enabled: true
+    type: statefulset
+    size: 10Gi
+  rbac:
+    create: true
+    pspEnabled: false
+    namespaced: true
+  sidecar:
+    dashboards:
+      enabled: true
+      envFromSecret: grafana
+  adminUser: admin
+  adminPassword: "" # Defaults to a random alpha numeric 40 character value
+  grafana.ini:
+    feature_toggles:
+      enable: tempoSearch tempoBackendSearch
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Loki
+        type: loki
+        isDefault: true
+        url: "http://loki:3100"
+        version: 1
+        isDefault: true
+        access: proxy
+      - name: Tempo
+        type: tempo
+        access: proxy
+        orgId: 1
+        url: "http://tempo:3100"
+        basicAuth: false
+        isDefault: false
+        version: 1
+        editable: false
+        apiVersion: 1
+        uid: tempo
+        jsonData:
+          httpMethod: GET
+          tracesToLogs:
+            datasourceUid: "loki"
+            tags: ["job", "instance", "pod", "namespace"]
+            mappedTags: [{ key: "service.name", value: "service" }]
+            mapTagNamesEnabled: false
+            spanStartTimeShift: "1h"
+            spanEndTimeShift: "1h"
+            filterByTraceID: false
+            filterBySpanID: false
+          search:
+            hide: false
+          nodeGraph:
+            enabled: true
+          lokiSearch:
+            datasourceUid: "loki"
+      - name: Prometheus
+        type: prometheus
+        url: "http://prometheus-server"
+        access: proxy
+        isDefault: false
+
+loki:
+  rbac:
+    create: false # true
+    pspEnabled: false
+    namespaced: true
+  livenessProbe:
+    httpGet:
+      path: /ready
+      port: http-metrics
+    initialDelaySeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http-metrics
+    initialDelaySeconds: 10
+  extraArgs:
+    config.expand-env: true
+  env:
+    - name: MINIO_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: minio
+          key: accesskey
+    - name: MINIO_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: minio
+          key: secretkey
+  config:
+    auth_enabled: false
+    ingester:
+      chunk_idle_period: 3m
+      chunk_block_size: 262144
+      chunk_retain_period: 1m
+      max_transfer_retries: 0
+      lifecycler:
+        ring:
+          kvstore:
+            store: inmemory
+          replication_factor: 1
+    schema_config:
+      configs:
+      - from: 2020-10-24
+        store: boltdb-shipper
+        object_store: s3
+        schema: v11
+        index:
+          prefix: index_
+          period: 24h
+    server:
+      http_listen_port: 3100
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /data/loki/boltdb-shipper-active
+        cache_location: /data/loki/boltdb-shipper-cache
+        cache_ttl: 24h
+        shared_store: s3
+      aws:
+        s3: "s3://minio.{{ .Values.global.namespace }}.svc.cluster.local:80"
+        bucketnames: loki
+        access_key_id: ${MINIO_ACCESS_KEY}
+        secret_access_key: ${MINIO_SECRET_KEY}
+        s3forcepathstyle: true
+    compactor:
+      working_directory: /data/loki/boltdb-shipper-compactor
+      compaction_interval: 10m
+      retention_enabled: true
+      retention_delete_delay: 2h
+      retention_delete_worker_count: 150
+      shared_store: s3
+    limits_config:
+      # 1416 / 24h (schema period) = 59 days
+      # https://grafana.com/docs/loki/latest/operations/storage/retention/#retention-configuration
+      retention_period: 1416h
+
+opentelemetry-collector:
+  mode: deployment
+  clusterRole:
+    create: false
+  containerLogs:
+    enabled: true
+  ports:
+    prometheus:
+      enabled: true
+      containerPort: 19100
+      servicePort: 19100
+      hostPort: 19100
+      protocol: TCP
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+      # Settings to scrape metrics directly from a Prometheus database and push it to
+      # the collector for further processing. This can be useful if you want to fanout metrics
+      # data to other systems (eg. datadog).
+      # prometheus:
+      #   config:
+      #     scrape_configs:
+      #       - job_name: 'otel-collector'
+      #         scrape_interval: 10s
+      #         static_configs:
+      #           - targets: ['prometheus-server']
+    processors:
+      batch:
+        send_batch_size: 50
+        timeout: 5s
+      memory_limiter:
+        check_interval: 2s
+        limit_mib: 500
+        spike_limit_mib: 100
+    exporters:
+      logging:
+        logLevel: error
+      otlp/tempo:
+        endpoint: "tempo:4317"
+        tls:
+          insecure: true
+          insecure_skip_verify: true
+        sending_queue:
+          num_consumers: 4
+          queue_size: 100
+        retry_on_failure:
+          enabled: true
+      # Settings for creating a Prometheus endpoint which other system can scrape metrics.
+      # This can be useful if you have metrics coming from multiple sources (e.g. statsd, otel)
+      # and you want to convert all to Prometheus time-series.
+      # prometheus:
+      #   endpoint: "0.0.0.0:19090"
+      #   namespace: "arcloud"
+      #   send_timestamps: true
+      #   metric_expiration: 10m
+      #   resource_to_telemetry_conversion:
+      #     enabled: true
+    extensions:
+      pprof: {}
+      zpages: {}
+      health_check: {}
+      memory_ballast:
+        size_mib: 512
+    service:
+      extensions:
+      - pprof
+      - zpages
+      - health_check
+      pipelines:
+        traces:
+          receivers:
+          - otlp
+          processors:
+          - memory_limiter
+          - batch
+          exporters:
+          - otlp/tempo
+          - logging
+        # Settings to scrape metrics from Prometheus and in order to ship them upstream.
+        # metrics:
+        #   receivers:
+        #   - prometheus
+        #   processors:
+        #   - memory_limiter
+        #   - batch
+        #   exporters:
+        #   - logging
+        #   - prometheus
+
+promtail:
+  rbac:
+    create: false # NOTE: We creates a namespaced Role/RoleBinding to the promtail service account via the wrapper chart.
+    pspEnabled: false
+  extraArgs:
+    - -config.expand-env=true
+  extraEnv:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  config:
+    clients:
+    - url: http://loki:3100/loki/api/v1/push
+    snippets:
+      scrapeConfigs: |
+        - job_name: kubernetes-pods
+          pipeline_stages:
+            - cri: {}
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names:
+                  - ${POD_NAMESPACE}
+          relabel_configs:
+            - source_labels:
+                - __meta_kubernetes_pod_controller_name
+              regex: ([0-9a-z-.]+?)(-[0-9a-f]{8,10})?
+              action: replace
+              target_label: __tmp_controller_name
+            - source_labels:
+                - __meta_kubernetes_pod_label_app_kubernetes_io_name
+                - __meta_kubernetes_pod_label_app
+                - __tmp_controller_name
+                - __meta_kubernetes_pod_name
+              regex: ^;*([^;]+)(;.*)?$
+              action: replace
+              target_label: app
+            - source_labels:
+                - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+                - __meta_kubernetes_pod_label_release
+              regex: ^;*([^;]+)(;.*)?$
+              action: replace
+              target_label: instance
+            - source_labels:
+                - __meta_kubernetes_pod_label_app_kubernetes_io_component
+                - __meta_kubernetes_pod_label_component
+              regex: ^;*([^;]+)(;.*)?$
+              action: replace
+              target_label: component
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_node_name
+              target_label: node_name
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_namespace
+              target_label: namespace
+            - action: replace
+              replacement: $1
+              separator: /
+              source_labels:
+              - namespace
+              - app
+              target_label: job
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_name
+              target_label: pod
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_container_name
+              target_label: container
+            - action: replace
+              replacement: /var/log/pods/*$1/*.log
+              separator: /
+              source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+              target_label: __path__
+            - action: replace
+              regex: true/(.*)
+              replacement: /var/log/pods/*$1/*.log
+              separator: /
+              source_labels:
+              - __meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash
+              - __meta_kubernetes_pod_annotation_kubernetes_io_config_hash
+              - __meta_kubernetes_pod_container_name
+              target_label: __path__
+
+tempo:
+  tempo:
+    # Workaroud for minio secrets:
+    # https://github.com/grafana/helm-charts/issues/158#issuecomment-953431846
+    extraArgs:
+      config.expand-env: true
+    extraEnv:
+      - name: MINIO_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio
+            key: accesskey
+      - name: MINIO_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio
+            key: secretkey
+    multitenancyEnabled: false
+    searchEnabled: true
+    ingester:
+      complete_block_timeout: 30s
+      lifecycler:
+        ring:
+          kvstore:
+            store: inmemory
+          replication_factor: 1
+    server:
+      http_listen_port: 3100
+      log_level: info
+    storage:
+      trace:
+        backend: s3
+        s3:
+          bucket: tempo
+          endpoint: minio:80
+          access_key: ${MINIO_ACCESS_KEY}
+          secret_key: ${MINIO_SECRET_KEY}
+          insecure: true
+        blocklist_poll: 5m
+        wal:
+          path: /tmp/tempo/wal
+    config: |
+      multitenancy_enabled: {{ .Values.tempo.multitenancyEnabled }}
+      search_enabled: {{ .Values.tempo.searchEnabled }}
+      compactor:
+        compaction:
+          # https://grafana.com/docs/tempo/latest/configuration/#compactor
+          # Keep it for 14 days
+          block_retention: 336h
+          compacted_block_retention: {{ .Values.tempo.retention }}
+      distributor:
+        receivers:
+          {{- toYaml .Values.tempo.receivers | nindent 8 }}
+      ingester:
+        {{- toYaml .Values.tempo.ingester | nindent 6 }}
+      server:
+        {{- toYaml .Values.tempo.server | nindent 6 }}
+      storage:
+        {{- toYaml .Values.tempo.storage | nindent 6 }}
+      overrides:
+        {{- toYaml .Values.tempo.global_overrides | nindent 6 }}
+
+prometheus:
+  # NOTE: RBAC handled by chart/prometheus/templates
+  rbac:
+    create: false
+  server:
+    replicaCount: 1
+    statefulSet:
+      enabled: true
+    retention: "30d"
+    persistentVolume:
+      enabled: true
+      size: 16Gi
+  alertmanager:
+    enabled: false
+  kubeStateMetrics:
+    enabled: false
+  nodeExporter:
+    enabled: false
+  pushgateway:
+    enabled: false
+  serverFiles:
+    prometheus.yml:
+      scrape_configs:
+        - job_name: prometheus
+          static_configs:
+            - targets:
+              - localhost:9090
+  extraScrapeConfigs: |
+    # A scrape configuration for running Prometheus on a Kubernetes cluster.
+    # This uses separate scrape configs for cluster components (i.e. API server, node)
+    # and services to allow each to use different authentication configs.
+    #
+    # Kubernetes labels will be added as Prometheus labels on metrics via the
+    # `labelmap` relabeling action.
+
+    # Scrape config for API servers.
+    #
+    # Kubernetes exposes API servers as endpoints to the default/kubernetes
+    # service so this uses `endpoints` role and uses relabelling to only keep
+    # the endpoints associated with the default/kubernetes service using the
+    # default named port `https`. This works for single API server deployments as
+    # well as HA API server deployments.
+    - job_name: 'kubernetes-apiservers'
+
+      kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+      # Default to scraping over https. If required, just disable this or change to
+      # `http`.
+      scheme: https
+
+      # This TLS & bearer token file config is used to connect to the actual scrape
+      # endpoints for cluster components. This is separate to discovery auth
+      # configuration because discovery & scraping are two separate concerns in
+      # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+      # the cluster. Otherwise, more config options have to be provided within the
+      # <kubernetes_sd_config>.
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        # If your node certificates are self-signed or use a different CA to the
+        # master CA, then disable certificate verification below. Note that
+        # certificate verification is an integral part of a secure infrastructure
+        # so this should only be disabled in a controlled environment. You can
+        # disable certificate verification by uncommenting the line below.
+        #
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+      # Keep only the default/kubernetes service endpoints for the https port. This
+      # will add targets for each API server which Kubernetes adds an endpoint to
+      # the default/kubernetes service.
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+    # Scrape config for service endpoints.
+    #
+    # The relabeling allows the actual service scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/scrape`: Only scrape services that have a value of
+    # `true`, except if `prometheus.io/scrape-slow` is set to `true` as well.
+    # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+    # to set this to `https` & most likely set the `tls_config` of the scrape config.
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+    # service then set this appropriately.
+    # * `prometheus.io/param_<parameter>`: If the metrics endpoint uses parameters
+    # then you can set any parameter
+    - job_name: 'kubernetes-service-endpoints'
+      honor_labels: true
+
+      kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
+          action: drop
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+?)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_annotation_prometheus_io_param_(.+)
+          replacement: __param_$1
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: service
+        - source_labels: [__meta_kubernetes_pod_node_name]
+          action: replace
+          target_label: node
+
+    # Scrape config for slow service endpoints; same as above, but with a larger
+    # timeout and a larger interval
+    #
+    # The relabeling allows the actual service scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/scrape-slow`: Only scrape services that have a value of `true`
+    # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+    # to set this to `https` & most likely set the `tls_config` of the scrape config.
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+    # service then set this appropriately.
+    # * `prometheus.io/param_<parameter>`: If the metrics endpoint uses parameters
+    # then you can set any parameter
+    - job_name: 'kubernetes-service-endpoints-slow'
+      honor_labels: true
+
+      scrape_interval: 5m
+      scrape_timeout: 30s
+
+      kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+?)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_annotation_prometheus_io_param_(.+)
+          replacement: __param_$1
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: service
+        - source_labels: [__meta_kubernetes_pod_node_name]
+          action: replace
+          target_label: node
+
+    - job_name: 'prometheus-pushgateway'
+      honor_labels: true
+
+      kubernetes_sd_configs:
+        - role: service
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+          action: keep
+          regex: pushgateway
+
+    # Example scrape config for probing services via the Blackbox Exporter.
+    #
+    # The relabeling allows the actual service scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/probe`: Only probe services that have a value of `true`
+    - job_name: 'kubernetes-services'
+      honor_labels: true
+
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+
+      kubernetes_sd_configs:
+        - role: service
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+          action: keep
+          regex: true
+        - source_labels: [__address__]
+          target_label: __param_target
+        - target_label: __address__
+          replacement: blackbox
+        - source_labels: [__param_target]
+          target_label: instance
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          target_label: service
+
+    # Example scrape config for pods
+    #
+    # The relabeling allows the actual pod scrape endpoint to be configured via the
+    # following annotations:
+    #
+    # * `prometheus.io/scrape`: Only scrape pods that have a value of `true`,
+    # except if `prometheus.io/scrape-slow` is set to `true` as well.
+    # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+    # to set this to `https` & most likely set the `tls_config` of the scrape config.
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
+    - job_name: 'kubernetes-pods'
+      honor_labels: true
+
+      kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
+          action: drop
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+          action: replace
+          regex: (https?)
+          target_label: __scheme__
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: (.+?)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_annotation_prometheus_io_param_(.+)
+          replacement: __param_$1
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: pod
+        - source_labels: [__meta_kubernetes_pod_phase]
+          regex: Pending|Succeeded|Failed|Completed
+          action: drop
+
+    # Example Scrape config for pods which should be scraped slower. An useful example
+    # would be stackriver-exporter which queries an API on every scrape of the pod
+    #
+    # The relabeling allows the actual pod scrape endpoint to be configured via the
+    # following annotations:
+    #
+    # * `prometheus.io/scrape-slow`: Only scrape pods that have a value of `true`
+    # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+    # to set this to `https` & most likely set the `tls_config` of the scrape config.
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
+    - job_name: 'kubernetes-pods-slow'
+      honor_labels: true
+
+      scrape_interval: 5m
+      scrape_timeout: 30s
+
+      kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+              - "{{ .Release.Namespace }}"
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+          action: replace
+          regex: (https?)
+          target_label: __scheme__
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: (.+?)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_annotation_prometheus_io_param_(.+)
+          replacement: __param_$1
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: pod
+        - source_labels: [__meta_kubernetes_pod_phase]
+          regex: Pending|Succeeded|Failed|Completed
+          action: drop

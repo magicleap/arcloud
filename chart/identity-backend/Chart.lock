@@ -1,0 +1,6 @@
+dependencies:
+- name: identity-backend
+  repository: https://registry.magicleap.io/chartrepo/enterprise/
+  version: 1.16.1
+digest: sha256:8217d76f9f36c0c30e433464b88944d2102647c909f7bc2774a51ab9d5c90915
+generated: "2022-08-03T21:59:07.005897934Z"

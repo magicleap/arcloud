@@ -1,0 +1,97 @@
+opa-istio-device:
+  policies:
+    authz.rego: |
+      package istio.authz
+      import input.attributes.request.http as http_request
+
+      device_sessions_url := "http://device-gateway:8189/v0/device-sessions"
+
+      default allow = {
+          "allowed": false,
+          "headers": {
+              "x-ext-auth-allow": "no",
+          },
+          "body": "Unauthorized Request",
+          "http_status": 401
+      }
+
+      # if a device token was not provided in the request (x-device-identity-token header)
+      # the verified JWT payload header device-jwt-payload won't be here
+      # (not device_token_verified would be true in that case).
+      # If an invalid token was provided (e.g. malformed/invalid signature, expired, etc.)
+      # the request would not even make it this far, as
+      # the upstream controller would already have denied the request.
+      # We will allow passing this through to the downstream pod/service, as certain endpoints
+      # may not require device token auth. If device token auth _is_
+      # required for the endpoint, the downstream pod/service should disallow
+      # the request there by checking that the device-jwt-payload is header is present or not.
+      #
+      # NOTE: this means that if x-device-id is provided and the token is not, we will still allow it,
+      # still send it to the downstream service. It is up to the service to check/care if x-device-id should
+      # be allowed in the absence of a valid token
+      allow {
+          not device_token_verified
+      }
+
+      # the device token was provided, verified upstream via JWKS check at the ingress controller,
+      # the token is associated with a live device session,
+      # and the x-device-id header was not provided
+      # (this might be ok for the particular endpoint of the service...
+      #  up to the service to check on x-device-id existence)
+      allow {
+          device_token_verified
+          not http_request.headers["x-device-id"]
+          device_session_detected
+      }
+
+      # the device token was provided, verified upstream via JWKS check at the ingress controller,
+      # the token is associated with a live device session,
+      # and the x-device-id header was provided and matches the device session information associated with the token
+      allow {
+          device_token_verified
+          http_request.headers["x-device-id"] = device_session_device_id # active session detected with matching device id
+      }
+
+      # only way for the device-jwt-payload header to be present at this point is that
+      # the x-device-identity-token header was provided and basic verification (namely signature and expiration)
+      # was done by the ingress controller (via JWKS). If the token was invalid from that check the request would
+      # already be denied. If the x-device-identity-token header were not present this header would not be here either
+      # (even stripped out if x-device-identity-token was not provided)
+      device_token_verified {
+          http_request.headers["device-jwt-payload"]
+      }
+
+      device_jwt_payload = obj {
+          decoded := base64url.decode(http_request.headers["device-jwt-payload"])
+          obj := json.unmarshal(decoded)
+      }
+
+      device_claim_sub = object.get(device_jwt_payload, "sub", "")
+
+      # if a live device session exists for the provided session id, which can be obtained from
+      # the device-jwt-payload header JWT payload "sub" field (subject of the token)
+      # this will be the device session information,
+      # as provided by the device-session API (part of device-gateway),
+      # the body of the 'GET /v0/device-sessions' (with session-id request header) endpoint response
+      device_session = obj {
+          response := http.send(
+              {
+                  "method": "get",
+                  "url": device_sessions_url,
+                  "headers": {
+                      "session-id": device_claim_sub
+                  },
+                  "force_cache": true,
+                  "force_cache_duration_seconds": 0,
+                  "caching_mode": "deserialized",
+              }
+          )
+          response.status_code == 200
+          obj := response.body
+      }
+
+      device_session_device_id = object.get(device_session, "device_id", "")
+
+      device_session_detected {
+          device_session["device_id"]
+      }

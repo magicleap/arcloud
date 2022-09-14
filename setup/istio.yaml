@@ -1,0 +1,37 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  namespace: istio-system
+  name: istiocontrolplane
+spec:
+  values:
+    pilot:
+      env:
+        PILOT_JWT_ENABLE_REMOTE_JWKS: true
+        PILOT_JWT_PUB_KEY_REFRESH_INTERVAL: 10s
+  meshConfig:
+    defaultConfig:
+      holdApplicationUntilProxyStarts: true
+      proxyMetadata:
+        ISTIO_META_DNS_CAPTURE: "true"
+        ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            loadBalancerIP: {your-load-balancer-ip}
+            ports:
+              - name: http2
+                port: 80
+                targetPort: 8080
+              - name: https
+                port: 443
+                targetPort: 8443
+              - name: status-port
+                port: 15021
+                targetPort: 15021
+              - name: mqtt-secure
+                port: 8883
+                targetPort: 9883
