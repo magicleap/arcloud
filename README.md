@@ -1,6 +1,6 @@
 # arcloud-bundle
 
-AR Cloud helm chart bundle, and installation scripts.
+Version `0.40` of AR Cloud helm chart bundle, and installation scripts.
 
 ## Contributing
 
