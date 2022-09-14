@@ -3,7 +3,7 @@
 ########################################################
 
 global:
-  version: 0.39.11
+  version: 0.39.12
   namespace: arcloud
   domainProtocol: https
   mqttPort: 8883
@@ -23,7 +23,6 @@ global:
     host: nats
     port: 4222
     clusterID: arcloud
-    enableJetStream: true # TODO (MH): Remove w/ STAN
   postgresql:
     host: postgresql
     port: 5432
@@ -426,7 +425,6 @@ mapping:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
     clusterId: "{{ $.Values.global.nats.clusterID }}"
-    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
   tracing:
     enabled: false
 
@@ -478,7 +476,6 @@ session-manager:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
     clusterId: "{{ $.Values.global.nats.clusterID }}"
-    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
 
 spatial-anchors:
   image:
@@ -509,7 +506,6 @@ spatial-anchors:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
     clusterId: "{{ $.Values.global.nats.clusterID }}"
-    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
 
 streaming:
   image:
@@ -548,7 +544,6 @@ streaming:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
     clusterId: "{{ $.Values.global.nats.clusterID }}"
-    jetstreamEnabled: "{{ .Values.global.nats.enableJetStream }}" # TODO (MH): Remove w/ STAN
   server:
     streamscheck:
       tickerDurationSec: 300
