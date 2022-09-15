@@ -3,7 +3,7 @@
 ########################################################
 
 global:
-  version: 0.40.5
+  version: 0.40.6
   namespace: arcloud
   domainProtocol: https
   mqttPort: 8883
