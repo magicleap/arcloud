@@ -3,13 +3,13 @@
 ########################################################
 
 global:
-  version: 0.40.6
+  version: 0.40.9
   namespace: arcloud
+  domain: localhost
+  domainPrefix: ""
   domainProtocol: https
   mqttPort: 8883
   mqttProtocol: ssl
-  domain: localhost
-  domainPrefix: ""
   annotations: {}
   image:
     registry: quay.io/magicleap

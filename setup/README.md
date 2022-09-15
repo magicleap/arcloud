@@ -3,18 +3,17 @@ AR Cloud from Magic Leap allows for shared experiences using features such as
 **mapping**, **localization**, and **spacial anchors**.  It is easily installed
 by the customer utilizing Kubernetes on their own preferred cloud infrastructure.
 
-
 ## Setting up AR Cloud
 Setting up Magic Leap AR Cloud is a three step process.
 1.  Review and setup the [system requirements](#system_requirements).
 2.  Download and install AR Cloud.
 3.  Verify your installation.
 
-
 ### System Requirements 
 - [Kubernetes](https://kubernetes.io) is required with the following [minimum requirements](#kubernetes-minimum-requirements)
 - [Istio](https://istio.io/) is required with the following following [minimum requirements](#istio-minimum-requirements)
-- The following will be installed by default during the setup process.\
+- [Helm](https://helm.sh/) is required with the following following [minimum requirements](#helm-minimum-requirements)
+- The following will be installed by default during the setup process.
   These can be excluded for advanced deployments if using existing installations of these services.
    - [PostgreSQL](https://www.postgresql.org/)
    - [Nats](https://nats.io/)
@@ -23,24 +22,37 @@ Setting up Magic Leap AR Cloud is a three step process.
    - [Grafana](https://grafana.com/)
    - [Prometheus](https://prometheus.io/)
 
-
-#### Kubernetes Minimum Requirements 
-- Version 1.23 or above
-- 4 CPU's
-- 16 GB memory
+#### Kubernetes Minimum Requirements
+- Version **1.23.x or 1.24.x**
+- 3 Nodes
+  - 4 CPU's
+  - 16 GB memory
 - Enable HTTP load balancing
 
+#### Kubernetes Recommended Requirements
+- Version **1.23.x or 1.24.x**
+- 8 Nodes
+  - 8 CPU's
+  - 32 GB memory
+- Enable HTTP load balancing
 
-#### Istio Minimum Requirements 
-- AR Cloud requires Istio **version 1.14** exactly. 
+#### Istio Minimum Requirements
+- AR Cloud requires Istio **version 1.14.x**.
 - DNS Preconfigured with cooresponding certificate for TLS
 - Configure Istio Gateway
 - Open the MQTT Port (8883)
 
+#### Helm Minimum Requirements
+- Version **3.9.x**
+
+### Tooling
+- Ensure you have the following tooling installed on the computer running the installation.
+  - [Helm](https://helm.sh/)
+  - [Kubctl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
 
 ## Setup of Infrastructure
-To get started as quickly as possible, refer to these simple setup steps using google cloud.
-For other cloud providers or infrastructure, refer to their specific documenation. 
+To get started as quickly as possible, refer to these simple setup steps using [google cloud](https://cloud.google.com/sdk/docs/install).
+For other cloud providers or infrastructure, refer to their specific documentation.
 
 Reserve a static IP
 Reserver a Static IP address and assign it a DNS Record.
@@ -48,7 +60,6 @@ Reserver a Static IP address and assign it a DNS Record.
 gcloud compute addresses create istio-ip --project={your-project} --region=us-central1
 gcloud dns --project={your-project} record-sets create {your-domain} --type="A" --zone="{your-domain}" --rrdatas="{public-ip}" --ttl="30"
 ```
-
 
 Create a Cluster.  Be sure to create a VPC prior to running this command and supply it as the subnetwork.
 Refer to google cloud documentation for best practices [VPC](https://cloud.google.com/vpc/docs/vpc) and [Subnets](https://cloud.google.com/vpc/docs/subnets)
@@ -61,7 +72,13 @@ Login kubectl into the remote Cluster
 gcloud container clusters get-credentials cluster-1 --zone us-central1-a --project {your-project}
 ```
 
-Download and extract Istio.  Importan, AR Cloud requires Istio version 1.14.
+Confirm kubectl is directed at the correct context
+```sh
+kubectl config current-context
+gke_{your-project}-{your-region}-{your-cluster}
+```
+
+Download and extract Istio.  Important, AR Cloud requires Istio version 1.14.
 ```sh
 curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.14.1 sh -
 cd istio-1.14.1
@@ -99,32 +116,29 @@ file to have the correct DNS name.
 kubectl -n istio-system apply -f ../setup/certificate.yaml
 ```
 
-Create the namespace
+Create the namespace, and enable Istio.
 ```sh
 kubectl create namespace arcloud
 kubectl label namespace arcloud istio-injection=enabled
 ```
 
-Create the container registry secret.  This secret is used to access the AR Cloud images and is provided at the time of purchase.
+Create the container registry secret.  This secret is used to access the AR Cloud images, and is provided at the time of purchase.
 ```sh
 kubectl --namespace arcloud create secret docker-registry container-registry --docker-server=quay.io --docker-username={username-to-quay} --docker-password={secret-to-quay}
 ```
 
-## Install AR Cloud
-- Download AR Cloud from the [release page](https://github.com/orgs/magicleap)
-- Unzip the file release file.  For example: arcloud-bundle-0.25.25.zip
-- cd arcloud-bundle-0.25.25
-- Review and edit the values.yaml file.  Default values have been supplied for quick setup.
-- Edit the **domain** field with your domain 
-- Make sure you have the following installed on the computer running the installation
-    - [Helm](https://helm.sh/)
-    - [Kubctl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
-    - [Istioctl](https://istio.io/latest/docs/setup/install/istioctl)
-- Run the AR Cloud installation script
+Navigate back to the base AR Cloud directory.
 ```sh
-./setup.sh --set global.domain={your-domain}
+cd ../
 ```
 
+## Install AR Cloud
+- Review and edit the values.yaml file.  Default values have been supplied for quick setup.
+- Edit the global **domain** field with your domain name.
+- Run the AR Cloud installation script.
+```sh
+./setup.sh
+```
 
 ## Verify your installation
 After installation of AR Cloud, the script will output important information that should be noted and saved. Below is an example of that output.
@@ -180,11 +194,9 @@ To configure Magic Leap 2 devices to use the newly installed instance of AR Clou
 This is done by scanning the QR Code on the **device configuration** page of the enterprise console.  This page is located under the
 *Device Management* menu and then the *Configure* option.
 
-
-
 ## Advanced Setup
 What is described above is used to get AR Cloud running quickly and in its simplest manor.
-However, AR Cloud is built to be flexibile and support many configurations.
+However, AR Cloud is built to be flexible and support many configurations.
 For example, MinIO can be configured to use object storage.  As part of the health check
 routes used on the dashboard, access to this infrastructure will be validated.
 
@@ -217,16 +229,13 @@ Magic Leap recommends reviewing the installed infrastructure to align with best 
 - Create a user for each system working the system
 - Assign access to each user based on the following chart
 
-
-
 ## Integrations
 AR Cloud logs telemetry information and service logs using [OpenTelemetry](https://opentelemetry.io/).
 The default installation installs [Grafana](https://grafana.com/) and [Prometheus](https://prometheus.io/),
-but these can be substitued with other OTEL complient solutions.
+but these can be substituted with other OTEL compliant solutions.
 
 The **Health Check Endpoints** can be used to monitor the health of the system.  These primarily focus on 
 connectivity to the underlying resources such as database access and file storage.
 
 [Key Cloak](https://www.keycloak.org/) is provided by default to manage users and manage access to API's.
 Users can be managed directly in Key Cloak or it can be used to federate an existing identity solution.
-
