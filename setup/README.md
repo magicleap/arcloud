@@ -50,6 +50,12 @@ Setting up Magic Leap AR Cloud is a three step process.
   - [Helm](https://helm.sh/)
   - [Kubctl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
 
+## Download AR Cloud
+- Download AR Cloud from the [release page](https://github.com/orgs/magicleap)
+- Unzip the release file.  For example: arcloud-0.40.25.zip
+- cd arcloud-0.40.25
+- Review and edit the values.yaml file.  Default values have been supplied for quick setup.
+
 ## Setup of Infrastructure
 To get started as quickly as possible, refer to these simple setup steps using [google cloud](https://cloud.google.com/sdk/docs/install).
 For other cloud providers or infrastructure, refer to their specific documentation.
