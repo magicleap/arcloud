@@ -3,7 +3,7 @@
 ########################################################
 
 global:
-  version: 0.40.10
+  version: 0.40.11
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
