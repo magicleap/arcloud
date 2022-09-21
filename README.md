@@ -68,21 +68,23 @@ gcloud dns --project={your-project} record-sets create {your-domain} --type="A" 
 ```
 
 Create a Cluster.  Be sure to create a VPC prior to running this command and supply it as the subnetwork.
-Refer to google cloud documentation for best practices [VPC](https://cloud.google.com/vpc/docs/vpc) and [Subnets](https://cloud.google.com/vpc/docs/subnets)
+Refer to google cloud documentation for best practices [VPC](https://cloud.google.com/vpc/docs/vpc), [Subnets](https://cloud.google.com/vpc/docs/subnets)
+and [RegionsZones](https://cloud.google.com/compute/docs/regions-zones)
 ```sh
-gcloud beta container --project "{your-project}" clusters create "cluster-1" --zone "us-central1-a" --no-enable-basic-auth --cluster-version "1.23.7-gke.1900" --release-channel "regular" --machine-type "e2-standard-4" --image-type "COS_CONTAINERD" --disk-type "pd-standard" --disk-size "100" --metadata disable-legacy-endpoints=true --scopes "https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly","https://www.googleapis.com/auth/trace.append" --max-pods-per-node "110" --num-nodes "3" --logging=SYSTEM,WORKLOAD --monitoring=SYSTEM --enable-ip-alias --network "projects/{your-project}/global/networks/default" --subnetwork "projects/{your-project}/regions/us-central1/subnetworks/default" --no-enable-intra-node-visibility --default-max-pods-per-node "110" --no-enable-master-authorized-networks --addons HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver --enable-autoupgrade --enable-autorepair --max-surge-upgrade 1 --max-unavailable-upgrade 0 --enable-shielded-nodes --node-locations "us-central1-a"
+gcloud beta container --project "{your-project}" clusters create "{your-cluster-name}" --zone "{your-zone}" --no-enable-basic-auth --release-channel "regular" --machine-type "e2-standard-4" --image-type "COS_CONTAINERD" --disk-type "pd-standard" --disk-size "100" --metadata disable-legacy-endpoints=true --scopes "https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly","https://www.googleapis.com/auth/trace.append" --max-pods-per-node "110" --num-nodes "3" --logging=SYSTEM,WORKLOAD --monitoring=SYSTEM --enable-ip-alias --network "projects/{your-project}/global/networks/default" --subnetwork "projects/{your-project}/regions/{your-region}/subnetworks/default" --no-enable-intra-node-visibility --default-max-pods-per-node "110" --no-enable-master-authorized-networks --addons HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver --enable-autoupgrade --enable-autorepair --max-surge-upgrade 1 --max-unavailable-upgrade 0 --enable-shielded-nodes --node-locations "{your-zone}"
 ```
 
 Login kubectl into the remote Cluster
 ```sh
-gcloud container clusters get-credentials cluster-1 --zone us-central1-a --project {your-project}
+gcloud container clusters get-credentials {your-cluster-name} --zone {your-zone} --project {your-project}
 ```
 
 Confirm kubectl is directed at the correct context
 ```sh
 kubectl config current-context
-gke_{your-project}-{your-region}-{your-cluster}
 ```
+
+*NOTE: Expected response: `gke_{your-project}-{your-region}-{your-cluster}`*
 
 Download and extract Istio.  Important, AR Cloud requires Istio version 1.14.
 ```sh
@@ -91,7 +93,7 @@ cd istio-1.14.1
 ```
 
 Install Istio with the static IP address reserved earlier.  Edit the istio.yaml
-file to have the correct static IP address.
+file to have the correct static IP address. All config yaml files are located in AR Cloud folder.
 ```sh
 ./bin/istioctl install -y -f ../setup/istio.yaml
 ```
