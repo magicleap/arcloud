@@ -3,7 +3,7 @@
 ########################################################
 
 global:
-  version: 0.40.14
+  version: 0.41.21
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -33,8 +33,13 @@ global:
     bucket: device-gateway
     http:
       port: 8289
+  ##############################
+  # EXPERIMENTAL FEATURE FLAGS #
+  ##############################
+  # Feature flags are experimental, and are NOT supported. DO NOT enable
+  # these on a non-experimental system.
   features:
-    mapMerge: true
+    mapMerge: false
     spaceMeshing: false
 
 #############
@@ -57,7 +62,7 @@ x-securityContext: &securityContext
 
 x-jwtRuleKeycloak: &jwtRuleKeycloak
   issuer: "{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}/auth/realms/magicleap"
-  jwksUri: "http://keycloak.{{ .Values.global.namespace }}.svc.cluster.local/auth/realms/magicleap/protocol/openid-connect/certs"
+  jwksUri: "http://keycloak.{{ .Values.global.namespace }}.svc.cluster.local:80/auth/realms/magicleap/protocol/openid-connect/certs"
   outputPayloadToHeader: jwt-payload
   forwardOriginalToken: false
 

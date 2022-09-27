@@ -256,6 +256,10 @@ opentelemetry-collector:
         #   - prometheus
 
 promtail:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
   rbac:
     create: false # NOTE: We creates a namespaced Role/RoleBinding to the promtail service account via the wrapper chart.
     pspEnabled: false

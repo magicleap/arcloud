@@ -42,6 +42,7 @@ readonly PRIORITY_CHARTS=(
 #
 # DEFAULT VARS
 #
+ACCEPT_EULA="${ACCEPT_EULA:=}"
 DRY_RUN=${DRY_RUN:=false}
 MINIMAL=${MINIMAL:=false}
 CHARTS_SET=${CHARTS_SET:=false}
@@ -381,6 +382,10 @@ OPTIONAL:
                           (can specify multiple, e.g. --values p1 --values p2)
 
 FLAGS:
+  --accept-eula           Inidcate acceptance of the EULA at:
+                          https://www.magicleap.com/software-license-agreement-ml2
+                          By default, the EULA is not accepted, and the installation
+                          cannot proceed.
   --debug                 Enable Helm verbose output (defaults is not to use verbose output)
   --installation-info     Display information about the cluster installation if system is up and running
   --dry-run               Print commands instead of running them
@@ -398,6 +403,10 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
+      --accept-eula )
+        ACCEPT_EULA=true
+        shift
+        ;;
       --charts )
         CHARTS_SET=true
         arg_required "${@}"
@@ -498,6 +507,7 @@ parse_args() {
   fi
 
   readonly VERBOSE
+  readonly ACCEPT_EULA
   readonly DRY_RUN
   readonly DEBUG
   readonly CHARTS
@@ -516,6 +526,7 @@ parse_args() {
 
   if $VERBOSE; then
     debug "VERSION: $VERSION"
+    debug "ACCEPT_EULA: $ACCEPT_EULA"
     debug "HOME_DIR: $HOME_DIR"
     debug "BUNDLE_NAME: $BUNDLE_NAME"
     debug "SCRIPT_NAME: $SCRIPT_NAME"
@@ -536,14 +547,20 @@ parse_args() {
     debug "UPDATE_DOCKER: $UPDATE_DOCKER"
     debug "UPDATE_HELM: $UPDATE_HELM"
   fi
+
+  if [ "$ACCEPT_EULA" != "true" ] && [ "$ACCEPT_EULA" != "yes" ] && [ "$ACCEPT_EULA" != "y" ] && [ "$ACCEPT_EULA" != "1" ]; then
+    default "Pass the --accept-eula flag to indicate your acceptance of the EULA."
+    default "You can review the EULA at: https://www.magicleap.com/software-license-agreement-ml2"
+    exit 1
+  fi
 }
 
 #
 # MAIN SCRIPT
 #
-assert_commands_exist docker helm kubectl
-
 parse_args "$@"
+
+assert_commands_exist docker helm kubectl
 
 if $PRINT_INSTALLATION_INFO; then
   print_installation_info

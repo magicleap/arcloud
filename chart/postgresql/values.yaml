@@ -2,4 +2,4 @@
 postgresql:
   image:
     repository: postgis/postgis
-    tag: 13-3.1-alpine
+    tag: 14-3.3

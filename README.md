@@ -15,7 +15,7 @@ Setting up Magic Leap AR Cloud is a three step process.
 - [Helm](https://helm.sh/) is required with the following following [minimum requirements](#helm-minimum-requirements)
 - The following will be installed by default during the setup process.
   These can be excluded for advanced deployments if using existing installations of these services.
-   - [PostgreSQL](https://www.postgresql.org/)
+   - [PostgreSQL](https://www.postgresql.org/) w/ the [PostGIS extension](https://postgis.net/)
    - [Nats](https://nats.io/)
    - [Key Cloak](https://www.keycloak.org/)
    - [MinIO](https://min.io/)
@@ -48,7 +48,7 @@ Setting up Magic Leap AR Cloud is a three step process.
 ### Tooling
 - Ensure you have the following tooling installed on the computer running the installation.
   - [Helm](https://helm.sh/)
-  - [Kubctl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
+  - [Kubectl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
 
 ## Download AR Cloud
 - Download AR Cloud from the [release page](https://github.com/orgs/magicleap)
@@ -143,7 +143,11 @@ cd ../
 ## Install AR Cloud
 - Review and edit the values.yaml file.  Default values have been supplied for quick setup.
 - Edit the global **domain** field with your domain name.
+- Review the Magic Leap 2 EULA at https://www.magicleap.com/software-license-agreement-ml2
 - Run the AR Cloud installation script.
+
+*NOTE: To indicate your acceptance of the EULA, you will need to add the `--accept-eula` flag to the following command*
+
 ```sh
 ./setup.sh
 ```
@@ -202,13 +206,9 @@ To configure Magic Leap 2 devices to use the newly installed instance of AR Clou
 This is done by scanning the QR Code on the **device configuration** page of the enterprise console.  This page is located under the
 *Device Management* menu and then the *Configure* option.
 
-## Advanced Setup
-What is described above is used to get AR Cloud running quickly and in its simplest manor.
-However, AR Cloud is built to be flexible and support many configurations.
-For example, MinIO can be configured to use object storage.  As part of the health check
-routes used on the dashboard, access to this infrastructure will be validated.
 
-Magic Leap recommends reviewing the installed infrastructure to align with best securitypractices listed below.
+## Secure deployment best pratices
+Magic Leap recommends reviewing the installed infrastructure to align with security best practices listed below.
 - Configure Kubernetes secrets to use a secret manager such as Vault together with an
 [external secret operator](https://github.com/external-secrets/external-secrets).
 - Follow security best practices when deploying each of the preexisting components
@@ -224,18 +224,20 @@ Magic Leap recommends reviewing the installed infrastructure to align with best 
 - What do Avoid?
   - Avoid permissive IAM policies in your environment
   - Avoid public IPs for nodes
-  - Avoid using nodes running Apparmor with container OS for the host nodes (or other minimal OS)
 - General pointers
   - Deploy the system on its own namespace
   - Isolate the deployment’s namespace from other deployed assets on the network level
   - Limit access to relevant container registries only
+  - Make sure to run nodes running Apparmor with Container OS for the host nodes (or other minimal OS)
   - Keep all components up-to-date
-- Create Different DB users
-- Assign different users their relevant permissions
-- Create separate users when accessing Minio
-  - https://docs.min.io/minio/baremetal/security/minio-identity-management/basic-authentication-with-minio-identity-provider.html
-- Create a user for each system working the system
-- Assign access to each user based on the following chart
+
+
+## Advanced Setup
+What is described above is used to get AR Cloud running quickly and in its simplest manor.
+However, AR Cloud is built to be flexibile and support many configurations.
+For example, MinIO can be configured to use object storage.  As part of the health check
+routes used on the dashboard, access to this infrastructure will be validated.
+
 
 ## Integrations
 AR Cloud logs telemetry information and service logs using [OpenTelemetry](https://opentelemetry.io/).
