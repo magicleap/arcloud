@@ -42,7 +42,7 @@ readonly PRIORITY_CHARTS=(
 #
 # DEFAULT VARS
 #
-ACCEPT_EULA="${ACCEPT_EULA:=}"
+ACCEPT_SLA="${ACCEPT_SLA:=}"
 DRY_RUN=${DRY_RUN:=false}
 MINIMAL=${MINIMAL:=false}
 CHARTS_SET=${CHARTS_SET:=false}
@@ -382,9 +382,9 @@ OPTIONAL:
                           (can specify multiple, e.g. --values p1 --values p2)
 
 FLAGS:
-  --accept-eula           Inidcate acceptance of the EULA at:
+  --accept-sla            Inidcate acceptance of the SLA at:
                           https://www.magicleap.com/software-license-agreement-ml2
-                          By default, the EULA is not accepted, and the installation
+                          By default, the SLA is not accepted, and the installation
                           cannot proceed.
   --debug                 Enable Helm verbose output (defaults is not to use verbose output)
   --installation-info     Display information about the cluster installation if system is up and running
@@ -403,8 +403,8 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --accept-eula )
-        ACCEPT_EULA=true
+      --accept-sla )
+        ACCEPT_SLA=true
         shift
         ;;
       --charts )
@@ -507,7 +507,7 @@ parse_args() {
   fi
 
   readonly VERBOSE
-  readonly ACCEPT_EULA
+  readonly ACCEPT_SLA
   readonly DRY_RUN
   readonly DEBUG
   readonly CHARTS
@@ -526,7 +526,7 @@ parse_args() {
 
   if $VERBOSE; then
     debug "VERSION: $VERSION"
-    debug "ACCEPT_EULA: $ACCEPT_EULA"
+    debug "ACCEPT_SLA: $ACCEPT_SLA"
     debug "HOME_DIR: $HOME_DIR"
     debug "BUNDLE_NAME: $BUNDLE_NAME"
     debug "SCRIPT_NAME: $SCRIPT_NAME"
@@ -548,9 +548,9 @@ parse_args() {
     debug "UPDATE_HELM: $UPDATE_HELM"
   fi
 
-  if [ "$ACCEPT_EULA" != "true" ] && [ "$ACCEPT_EULA" != "yes" ] && [ "$ACCEPT_EULA" != "y" ] && [ "$ACCEPT_EULA" != "1" ]; then
-    default "Pass the --accept-eula flag to indicate your acceptance of the EULA."
-    default "You can review the EULA at: https://www.magicleap.com/software-license-agreement-ml2"
+  if [ "$ACCEPT_SLA" != "true" ] && [ "$ACCEPT_SLA" != "yes" ] && [ "$ACCEPT_SLA" != "y" ] && [ "$ACCEPT_SLA" != "1" ]; then
+    default "Pass the --accept-sla flag to indicate your acceptance of the SLA."
+    default "You can review the SLA at: https://www.magicleap.com/software-license-agreement-ml2"
     exit 1
   fi
 }

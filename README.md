@@ -143,10 +143,10 @@ cd ../
 ## Install AR Cloud
 - Review and edit the values.yaml file.  Default values have been supplied for quick setup.
 - Edit the global **domain** field with your domain name.
-- Review the Magic Leap 2 EULA at https://www.magicleap.com/software-license-agreement-ml2
+- Review the Magic Leap 2 SLA at https://www.magicleap.com/software-license-agreement-ml2
 - Run the AR Cloud installation script.
 
-*NOTE: To indicate your acceptance of the EULA, you will need to add the `--accept-eula` flag to the following command*
+*NOTE: To indicate your acceptance of the SLA, you will need to add the `--accept-sla` flag to the following command*
 
 ```sh
 ./setup.sh
