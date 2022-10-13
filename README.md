@@ -1,6 +1,6 @@
 # Magic Leap AR Cloud
 AR Cloud from Magic Leap allows for shared experiences using features such as 
-**mapping**, **localization**, and **spacial anchors**.  It is easily installed
+**mapping**, **localization**, and **spatial anchors**.  It is easily installed
 by the customer utilizing Kubernetes on their own preferred cloud infrastructure.
 
 ## Setting up AR Cloud
@@ -51,9 +51,9 @@ Setting up Magic Leap AR Cloud is a three step process.
   - [Kubectl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
 
 ## Download AR Cloud
-- Download AR Cloud from the [release page](https://github.com/orgs/magicleap)
-- Unzip the release file.  For example: arcloud-0.40.25.zip
-- cd arcloud-0.40.25
+- Download AR Cloud from the [release page](https://github.com/magicleap/arcloud/releases)
+- Unzip the release file.  For example: arcloud-1.0.0.zip
+- cd arcloud-1.0.0
 - Review and edit the values.yaml file.  Default values have been supplied for quick setup.
 
 ## Setup of Infrastructure
