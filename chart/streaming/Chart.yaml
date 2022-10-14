@@ -14,15 +14,15 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.42.5
+version: 0.42.7
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 0.42.5
+appVersion: 0.42.7
 
 dependencies:
   - name: streaming
-    version: 0.42.5
+    version: 0.42.7
     repository: https://registry.magicleap.io/chartrepo/connected-services/
     # version: 0.0.0
     # repository: file://../../../../cs/streaming/helm
