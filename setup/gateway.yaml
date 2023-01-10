@@ -12,8 +12,6 @@ spec:
       name: http2
       number: 80
       protocol: HTTP
-    # tls: # Breaks ACME HTTP01
-    #   httpsRedirect: true
   - hosts:
     - '*'
     port:
@@ -23,6 +21,12 @@ spec:
     tls:
       credentialName: istio-gateway
       mode: SIMPLE
+  - hosts:
+    - '*'
+    port:
+      name: mqtt
+      number: 1883
+      protocol: TCP
   - hosts:
     - '*'
     port:

@@ -23,22 +23,36 @@ Setting up Magic Leap AR Cloud is a three step process.
    - [Prometheus](https://prometheus.io/)
 
 #### Kubernetes Minimum Requirements
-- Version **1.23.x or 1.24.x**
-- 3 Nodes
+- Version **1.23.x, 1.24.x, 1.25.x**
+- 3 Nodes (each with):
   - 4 CPU's
   - 16 GB memory
-- Enable HTTP load balancing
 
 #### Kubernetes Recommended Requirements
-- Version **1.23.x or 1.24.x**
-- 8 Nodes
+- Version **1.23.x, 1.24.x, 1.25.x**
+- 8 Nodes (each with):
   - 8 CPU's
   - 32 GB memory
-- Enable HTTP load balancing
+
+Example [machine types in GCP](https://cloud.google.com/compute/docs/general-purpose-machines):
+- 8 * e2-medium
+- 4 * e2-standard-2
+- 2 * e2-standard-4
+
+Example [instance types in AWS](https://aws.amazon.com/ec2/instance-types/):
+- 8 * t3.medium
+- 4 * m5.large
+- 2 * m5.xlarge
+
+#### Local Development Requirements
+- Version **1.23.x, 1.24.x, 1.25.x**
+- 1 Node:
+  - 6 CPU's
+  - 10 GB memory
 
 #### Istio Minimum Requirements
-- AR Cloud requires Istio **version 1.14.x**.
-- DNS Preconfigured with cooresponding certificate for TLS
+- AR Cloud requires Istio **version 1.16.x**.
+- DNS Pre-configured with corresponding certificate for TLS
 - Configure Istio Gateway
 - Open the MQTT Port (8883)
 
@@ -49,53 +63,220 @@ Setting up Magic Leap AR Cloud is a three step process.
 - Ensure you have the following tooling installed on the computer running the installation.
   - [Helm](https://helm.sh/)
   - [Kubectl](https://kubernetes.io/docs/reference/kubectl/kubectl/)
+  - [jq](https://stedolan.github.io/jq) _(used in some select scripts)_
 
 ## Download AR Cloud
 - Download AR Cloud from the [release page](https://github.com/magicleap/arcloud/releases)
-- Unzip the release file.  For example: arcloud-1.0.0.zip
-- cd arcloud-1.0.0
-- Review and edit the values.yaml file.  Default values have been supplied for quick setup.
+- Unzip the release file.  For example: arcloud-1.x.x.zip
+- `cd arcloud-1.x.x`
+
+## Environment Settings
+
+In your terminal configure the following variables per your environment.
+```sh
+# AR Cloud
+export NAMESPACE="arcloud"
+export DOMAIN="arcloud.domain.tld"
+
+# Container Registry
+export REGISTRY_SERVER="quay.io"
+export REGISTRY_USERNAME="your-registry-username"
+export REGISTRY_PASSWORD="your-registry-password"
+```
+
+Alternatively, make a copy of the [env.example file](./env.example), update the values
+and source it in your terminal:
+```sh
+cp setup/env.example setup/env.my-cluster
+# use your favourite editor to update the setup/env.my-cluster file
+. setup/env.my-cluster
+```
 
 ## Setup of Infrastructure
+
+### Infrastructure on GCP
 To get started as quickly as possible, refer to these simple setup steps using [google cloud](https://cloud.google.com/sdk/docs/install).
-For other cloud providers or infrastructure, refer to their specific documentation.
 
-Reserve a static IP
-Reserver a Static IP address and assign it a DNS Record.
+#### Environment Settings
+
+In your terminal configure the following variables per your environment.
 ```sh
-gcloud compute addresses create istio-ip --project={your-project} --region=us-central1
-gcloud dns --project={your-project} record-sets create {your-domain} --type="A" --zone="{your-domain}" --rrdatas="{public-ip}" --ttl="30"
+export GC_PROJECT_ID="your-project"
+export GC_REGION="your-region"
+export GC_ZONE="your-region-zone"
+export GC_DNS_ZONE="your-dns-zone"
+export GC_ADDRESS_NAME="your-cluster-ip"
+export GC_CLUSTER_NAME="your-cluster-name"
 ```
 
-Create a Cluster.  Be sure to create a VPC prior to running this command and supply it as the subnetwork.
-Refer to google cloud documentation for best practices [VPC](https://cloud.google.com/vpc/docs/vpc), [Subnets](https://cloud.google.com/vpc/docs/subnets)
-and [RegionsZones](https://cloud.google.com/compute/docs/regions-zones)
+_NOTE: These variables are already included in the [env file](#environment-settings) described above._
+
+#### Reserve a static IP
 ```sh
-gcloud beta container --project "{your-project}" clusters create "{your-cluster-name}" --zone "{your-zone}" --no-enable-basic-auth --release-channel "regular" --machine-type "e2-standard-4" --image-type "COS_CONTAINERD" --disk-type "pd-standard" --disk-size "100" --metadata disable-legacy-endpoints=true --scopes "https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly","https://www.googleapis.com/auth/trace.append" --max-pods-per-node "110" --num-nodes "3" --logging=SYSTEM,WORKLOAD --monitoring=SYSTEM --enable-ip-alias --network "projects/{your-project}/global/networks/default" --subnetwork "projects/{your-project}/regions/{your-region}/subnetworks/default" --no-enable-intra-node-visibility --default-max-pods-per-node "110" --no-enable-master-authorized-networks --addons HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver --enable-autoupgrade --enable-autorepair --max-surge-upgrade 1 --max-unavailable-upgrade 0 --enable-shielded-nodes --node-locations "{your-zone}"
+gcloud compute addresses create "${GC_ADDRESS_NAME}" --project="${GC_PROJECT_ID}" --region="${GC_REGION}"
 ```
 
-Login kubectl into the remote Cluster
+#### Retrieved the reserved static IP Address
 ```sh
-gcloud container clusters get-credentials {your-cluster-name} --zone {your-zone} --project {your-project}
+export IP_ADDRESS=$(gcloud compute addresses describe "${GC_ADDRESS_NAME}" --project="${GC_PROJECT_ID}" --region="${GC_REGION}" --format='get(address)')
+echo ${IP_ADDRESS}
 ```
 
-Confirm kubectl is directed at the correct context
+#### Assign the static IP to a DNS Record
+```sh
+gcloud dns --project="${GC_PROJECT_ID}" record-sets create "${DOMAIN}" --type="A" --zone="${GC_DNS_ZONE}" --rrdatas="${IP_ADDRESS}" --ttl="30"
+```
+
+#### Create a Cluster
+
+_NOTE: Be sure to create a VPC prior to running this command and supply it as the subnetwork. Refer to google cloud documentation for best practices [VPC](https://cloud.google.com/vpc/docs/vpc), [Subnets](https://cloud.google.com/vpc/docs/subnets)
+and [Regions / Zones](https://cloud.google.com/compute/docs/regions-zones)_
+
+```sh
+gcloud container clusters create "${GC_CLUSTER_NAME}" \
+    --project="${GC_PROJECT_ID}" \
+    --zone "${GC_ZONE}" \
+    --release-channel "regular" \
+    --machine-type "e2-standard-4" \
+    --num-nodes "3" \
+    --enable-shielded-nodes
+```
+
+#### Login kubectl into the remote Cluster
+```sh
+gcloud container clusters get-credentials ${GC_CLUSTER_NAME} --zone=${GC_ZONE} --project=${GC_PROJECT_ID}
+```
+
+#### Confirm kubectl is directed at the correct context
 ```sh
 kubectl config current-context
 ```
 
 *NOTE: Expected response: `gke_{your-project}-{your-region}-{your-cluster}`*
 
-Download and extract Istio.  Important, AR Cloud requires Istio version 1.14.
+### Infrastructure on AWS
+
+Make sure that the following tools are installed and configured:
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
+- [eksctl](https://docs.aws.amazon.com/eks/latest/userguide/eksctl.html)
+-   SSH client - a key pair is required and can be generated using:
+    ```sh
+    ssh-keygen -t rsa -b 4096
+    ```
+
+#### Environment Settings
+
+In your terminal configure the following variables per your environment.
 ```sh
-curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.14.1 sh -
-cd istio-1.14.1
+export AWS_PROFILE="your-profile"
+export AWS_ACCOUNT_ID="your-account-id"
+export AWS_REGION="your-region"
+export AWS_CLUSTER_NAME="your-cluster-name"
 ```
 
-Install Istio with the static IP address reserved earlier.  Edit the istio.yaml
-file to have the correct static IP address. All config yaml files are located in AR Cloud folder.
+_NOTE: These variables are already included in the [env file](#environment-settings) described above._
+
+#### Sample cluster configurations
+
+The two options below are alternatives that can be used depending on your preferences:
+- Option 1 - an unmanaged node group is used, manual installation of add-ons is required
+- Option 2 - an managed node group is used, add-ons and service accounts are installed automatically
+
+##### Option 1: Bare-bone cluster with non-managed node group
+
+Adjust the [eks-cluster.yaml](./eks-cluster.yaml) file to your needs and create the cluster:
 ```sh
-./bin/istioctl install -y -f ../setup/istio.yaml
+cat ./setup/eks-cluster.yaml | envsubst | eksctl create cluster -f -
+```
+Wait until the command finishes and verify the results in [CloudFormation](https://console.aws.amazon.com/cloudformation).
+
+Confirm kubectl is directed at the correct context:
+```sh
+kubectl config current-context
+```
+
+*NOTE: Expected response: `{your-email}@{your-cluster}.{your-region}.eksctl.io`*
+
+Complete the following guides to install additional required cluster components:
+- [Amazon EBS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html):
+    - [Creating the Amazon EBS CSI driver IAM role for service accounts](https://docs.aws.amazon.com/eks/latest/userguide/csi-iam-role.html)
+    - [Managing the Amazon EBS CSI driver as an Amazon EKS add-on](https://docs.aws.amazon.com/eks/latest/userguide/managing-ebs-csi.html)
+- [Installing the AWS Load Balancer Controller add-on](https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html)
+- [Managing the Amazon VPC CNI plugin for Kubernetes add-on](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html)
+
+*NOTE: In case of problems installing the VPC CNI plugin, do not provide the version, so the default one is used instead.*
+
+##### Option 2: Preconfigured cluster with managed node group and preinstalled add-ons
+
+Adjust the [eks-cluster-managed-with-addons.yaml](./eks-cluster-managed-with-addons.yaml) file to your needs and create
+the cluster:
+```sh
+cat ./setup/eks-cluster-managed-with-addons.yaml | envsubst | eksctl create cluster -f -
+```
+Wait until the command finishes and verify the results in [CloudFormation](https://console.aws.amazon.com/cloudformation).
+
+Confirm kubectl is directed at the correct context:
+```sh
+kubectl config current-context
+```
+
+*NOTE: Expected response: `{your-email}@{your-cluster}.{your-region}.eksctl.io`*
+
+Install the AWS Load Balancer Controller (use the image repository for the selected region based on this
+[list](https://docs.aws.amazon.com/eks/latest/userguide/add-ons-images.html)), e.g.:
+```sh
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+    -n kube-system \
+    --set clusterName=$AWS_CLUSTER_NAME \
+    --set serviceAccount.create=false \
+    --set serviceAccount.name=aws-load-balancer-controller \
+    --set image.repository=602401143452.dkr.ecr.eu-west-3.amazonaws.com/amazon/aws-load-balancer-controller
+```
+
+#### Cluster verification
+
+To make sure the cluster is correctly configured you can run the following commands:
+
+1.  Check if your cluster is accessible using eksctl:
+    ```sh
+    eksctl get cluster --region $AWS_REGION --name $AWS_CLUSTER_NAME -o yaml
+    ```
+
+    The cluster status should be ACTIVE.
+
+1.  Verify that the OIDC issuer is configured, e.g.:
+    ```yaml
+      Identity:
+        Oidc:
+          Issuer: https://oidc.eks.eu-west-3.amazonaws.com/id/0A6729247C19177211F7EE71E85F9F50
+    ```
+
+1.  Check if the add-ons are installed on your cluster:
+    ```sh
+    eksctl get addons --region $AWS_REGION --cluster $AWS_CLUSTER_NAME -o yaml
+    ```
+
+    There should be 2 add-ons and their status should be ACTIVE.
+
+### Alternative deployments
+
+For other cloud providers or infrastructure, refer to their specific documentation.
+
+## Install Cluster Services
+
+### Install Istio
+
+Download and extract Istio.  Important, AR Cloud requires Istio version 1.16.
+```sh
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.16.0 sh -
+cd istio-1.16.0
+```
+
+Install Istio with the static IP address reserved earlier in GCP. For AWS just run the command as is.
+```sh
+cat ../setup/istio.yaml | envsubst | ./bin/istioctl install -y -f -
 ```
 
 Install the Istio gateway.
@@ -103,7 +284,35 @@ Install the Istio gateway.
 kubectl -n istio-system apply -f ../setup/gateway.yaml
 ```
 
-Install Certificate Manager
+#### For AWS only:
+
+1.  Check the ELB address for the just created service and export it for later use:
+    ```sh
+    export AWS_ELB_DOMAIN=$(kubectl -n istio-system get svc istio-ingressgateway --template '{{(index .status.loadBalancer.ingress 0).hostname}}')
+    echo $AWS_ELB_DOMAIN
+    ```
+
+1. Modify your DNS zone by adding a CNAME entry for your domain pointing to the ELB address displayed in the previous step.
+
+1.  Update the load balancer attributes to increase the idle timeout:
+    ```sh
+    aws elb modify-load-balancer-attributes \
+        --load-balancer-name ${AWS_ELB_DOMAIN%%-*} \
+        --region $AWS_REGION \
+        --load-balancer-attributes ConnectionSettings={IdleTimeout=360}
+    ```
+
+Navigate back to the base AR Cloud directory.
+```sh
+cd ../
+```
+
+### Install Certificate Manager
+
+Certificate Manager uses LetsEncrypt to sign the domain certificate.
+
+_NOTE: This step can be skipped if you are configuring your own certificates, or do not intend to use TLS with your local development installation._
+
 ```sh
 CERT_MANAGER_VERSION=1.9.1
 helm upgrade --install --wait --repo https://charts.jetstack.io cert-manager cert-manager \
@@ -115,41 +324,67 @@ helm upgrade --install --wait --repo https://charts.jetstack.io cert-manager cer
 
 Configure the LetsEncrypt Issuer
 ```sh
-kubectl -n istio-system apply -f ../setup/issuer.yaml
+kubectl -n istio-system apply -f ./setup/issuer.yaml
 ```
 
-Request a Certificate for DNS. Edit the certificate.yaml
-file to have the correct DNS name.
+Request a Certificate for DNS.
 ```sh
-kubectl -n istio-system apply -f ../setup/certificate.yaml
-```
-
-Create the namespace, and enable Istio.
-```sh
-kubectl create namespace arcloud
-kubectl label namespace arcloud istio-injection=enabled
-```
-
-Create the container registry secret.  This secret is used to access the AR Cloud images, and is provided at the time of purchase.
-```sh
-kubectl --namespace arcloud create secret docker-registry container-registry --docker-server=quay.io --docker-username={username-to-quay} --docker-password={secret-to-quay}
-```
-
-Navigate back to the base AR Cloud directory.
-```sh
-cd ../
+cat ./setup/certificate.yaml | envsubst | kubectl -n istio-system apply -f -
 ```
 
 ## Install AR Cloud
-- Review and edit the values.yaml file.  Default values have been supplied for quick setup.
-- Edit the global **domain** field with your domain name.
-- Review the Magic Leap 2 SLA at https://www.magicleap.com/software-license-agreement-ml2
-- Run the AR Cloud installation script.
 
-*NOTE: To indicate your acceptance of the SLA, you will need to add the `--accept-sla` flag to the following command*
+### Create the namespace, and enable Istio.
+```sh
+kubectl create namespace ${NAMESPACE}
+kubectl label namespace ${NAMESPACE} istio-injection=enabled
+```
+
+### Create the container registry secret.
+
+This secret is used to access the AR Cloud images, and is provided at the time of purchase.
 
 ```sh
-./setup.sh
+kubectl --namespace ${NAMESPACE} delete secret container-registry --ignore-not-found
+kubectl --namespace ${NAMESPACE} create secret docker-registry container-registry --docker-server=${REGISTRY_SERVER} --docker-username=${REGISTRY_USERNAME} --docker-password=${REGISTRY_PASSWORD}
+```
+
+### Docker Login
+
+Login docker to the container registry
+
+_NOTE: This step is only necessary if you are setting up a local development installation._
+
+```sh
+echo ${REGISTRY_PASSWORD} | docker login ${REGISTRY_SERVER} \
+  --username "${REGISTRY_USERNAME}" \
+  --password-stdin
+```
+
+### Configuration
+
+Review the `values.yaml` file, as default values have been supplied for setup.
+
+Review the Magic Leap 2 SLA at https://www.magicleap.com/software-license-agreement-ml2
+
+_NOTE: To indicate your acceptance of the SLA, you will need to add the `--accept-sla` flag to the following commands_
+
+### Option 1: Install AR Cloud to your Kubernetes Cluster
+
+The following step is used to install AR Cloud into a multi-node Kubernetes cluster.
+
+```sh
+./setup.sh --set global.domain=${DOMAIN}
+```
+
+### Option 2: Install AR Cloud for Local Development
+
+The following step configures an **insecure** install of AR Cloud meant for local development purposes.
+
+_NOTE: To consume fewer resources, observability can be disabled with the addition of the `--no-observability` flag._
+
+```sh
+./setup.sh --set global.domain=${DOMAIN} --update-docker --no-secure
 ```
 
 ## Verify your installation
@@ -159,14 +394,14 @@ credentials displayed as part of the output.  Once logged in a simple dashboard 
 ```sh
 Enterprise Web:
 --------------
-http://arcloud.acme.io/
+https://arcloud.acme.io/
 
 Username: aradmin
 Password: ZfX8JlQKSmoFh3zbbaqOJZ56Id0xsm6k
 
 Keycloak:
 ---------
-http://arcloud.acme.io/auth/
+https://arcloud.acme.io/auth/
 
 Username: admin
 Password: 02cewPjTxy7baUCaJL10OGHggTmHQfmW
@@ -234,10 +469,37 @@ Magic Leap recommends reviewing the installed infrastructure to align with secur
 
 ## Advanced Setup
 What is described above is used to get AR Cloud running quickly and in its simplest manor.
-However, AR Cloud is built to be flexibile and support many configurations.
-For example, MinIO can be configured to use object storage.  As part of the health check
-routes used on the dashboard, access to this infrastructure will be validated.
+However, AR Cloud is built to be flexible and can support many configurations.
+For example, MinIO can be configured to use object storage, and even managed PostgreSQL
+instances with high availability and integrated backups.
 
+### Managed Database
+
+The following steps outline the steps for connecting AR Cloud to the managed database instance.
+
+*NOTE: These steps only apply to a new installation of AR Cloud.*
+
+#### PostgreSQL Minimum Requirements
+- PostgreSQL Version: `14+`
+- PostGIS Version: `3.3+`
+
+*NOTE: The PostGIS extension must be enabled on the `arcloud` database.*
+
+#### Database Configuration
+
+- Review and configure all settings within the `./scripts/setup-database.sh` script.
+
+- Execute the `./scripts/setup-database.sh` script against the managed database instance.
+
+- Create Kubernetes database secrets for each application within your AR Cloud namespace. Secret names are referenced for each AR Cloud application, see the `values.yaml` file `postgresql.existingSecret` keys.
+
+#### AR Cloud Setup
+
+When running the `./setup.sh` script, you will need to supply the following additional settings in order to disable the default installation of postgresql, and point application connections to the managed database.
+
+```sh
+./setup.sh ... --set postgresql.enabled=false,global.postgresql.host=${POSTGRESQL_HOST},global.postgresql.port=${POSTGRESQL_PORT}
+```
 
 ## Integrations
 AR Cloud logs telemetry information and service logs using [OpenTelemetry](https://opentelemetry.io/).

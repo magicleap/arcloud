@@ -47,6 +47,7 @@ DRY_RUN=${DRY_RUN:=false}
 MINIMAL=${MINIMAL:=false}
 CHARTS_SET=${CHARTS_SET:=false}
 NAMESPACE=${NAMESPACE:=arcloud}
+SECURE=${SECURE:=true}
 OBSERVABILITY=${OBSERVABILITY:=true}
 PARALLEL=${PARALLEL:=true}
 UPDATE_DOCKER=${UPDATE_DOCKER:=false}
@@ -141,6 +142,11 @@ print_installation_info() {
     fatal "Failed to retrieve PostgreSQL password"
   fi
 
+  local protocol=https
+  if ! $SECURE; then
+      protocol=http
+  fi
+
   local webconsole=$(kubectl get virtualservice \
     --namespace $NAMESPACE enterprise-console-web --output=jsonpath='{.spec.hosts[0]}' || echo "")
   if [ -z "${webconsole}" ] ; then
@@ -164,13 +170,13 @@ print_installation_info() {
   echo ""
   echo "Enterprise Web:"
   echo "--------------"
-  yellow "http://${webconsole}/"
+  yellow "${protocol}://${webconsole}/"
   echo ""
   yellow "Username: ${identity_username}\nPassword: ${identity_password}"
   echo ""
   echo "Keycloak:"
   echo "---------"
-  yellow "http://${webconsole}/auth/"
+  yellow "${protocol}://${webconsole}/auth/"
   echo ""
   yellow "Username: ${keycloak_username}\nPassword: ${keycloak_password}"
   echo ""
@@ -343,8 +349,12 @@ install_chart() {
   fi
 
   # shellcheck disable=SC2086
-  silent helm upgrade --timeout 10m --install --atomic $($DEBUG && echo "--debug") $($DRY_RUN && echo "--dry-run") \
-    --wait --namespace "$NAMESPACE" "$chart" "$CHART_DIR/$chart" $HELM_PARAMS
+  silent helm upgrade --timeout 10m --install --atomic --wait \
+    --namespace "$NAMESPACE" \
+    $($DEBUG && echo "--debug") \
+    $($DRY_RUN && echo "--dry-run") \
+    $(! $SECURE && echo "--set global.domainProtocol=http,global.domainPort=80,global.mqttProtocol=tcp,global.mqttPort=1883") \
+    "$chart" "$CHART_DIR/$chart" $HELM_PARAMS
 
   local stdout=$(cat $CHART_DIR/$chart/Chart.yaml | grep "appVersion:" | sed -e 's/appVersion: /v/')
   if $UPDATE_HELM; then
@@ -394,6 +404,7 @@ FLAGS:
   --no-check-dependencies Disable check of local and remote pre-requisites before running installations
   --no-observability      Disable observability charts installation
   --no-parallel           Disable parallel chart installation
+  --no-secure             Use insecure http and mqtt installation options
   --update-docker         Update the docker image (and roll the pods)
   --update-helm           Update helm chart
   -v|--verbose            Verbose output (debug traces)
@@ -441,6 +452,10 @@ parse_args() {
         ;;
       --no-parallel )
         PARALLEL=false
+        shift
+        ;;
+      --no-secure )
+        SECURE=false
         shift
         ;;
       --installation-info )
@@ -520,6 +535,7 @@ parse_args() {
   readonly OBSERVABILITY
   readonly PARALLEL
   readonly PRINT_INSTALLATION_INFO
+  readonly SECURE
   readonly UPDATE_DOCKER
   readonly UPDATE_HELM
   readonly HELM_PARAMS
@@ -544,6 +560,7 @@ parse_args() {
     debug "OBSERVABILITY: $OBSERVABILITY"
     debug "PARALLEL: $PARALLEL"
     debug "PRINT_INSTALLATION_INFO: $PRINT_INSTALLATION_INFO"
+    debug "SECURE: $SECURE"
     debug "UPDATE_DOCKER: $UPDATE_DOCKER"
     debug "UPDATE_HELM: $UPDATE_HELM"
   fi
@@ -560,7 +577,11 @@ parse_args() {
 #
 parse_args "$@"
 
-assert_commands_exist docker helm kubectl
+assert_commands_exist helm kubectl
+
+if $UPDATE_DOCKER; then
+  assert_commands_exist docker
+fi
 
 if $PRINT_INSTALLATION_INFO; then
   print_installation_info

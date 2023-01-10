@@ -5,6 +5,9 @@ metadata:
   name: istiocontrolplane
 spec:
   values:
+    gateways:
+      istio-ingressgateway:
+        autoscaleEnabled: false
     pilot:
       env:
         PILOT_JWT_ENABLE_REMOTE_JWKS: true
@@ -20,8 +23,9 @@ spec:
       - name: istio-ingressgateway
         enabled: true
         k8s:
+          replicaCount: 2
           service:
-            loadBalancerIP: {your-load-balancer-ip}
+            loadBalancerIP: ${IP_ADDRESS:-}
             ports:
               - name: http2
                 port: 80
@@ -32,6 +36,9 @@ spec:
               - name: status-port
                 port: 15021
                 targetPort: 15021
+              - name: mqtt
+                port: 1883
+                targetPort: 1883
               - name: mqtt-secure
                 port: 8883
                 targetPort: 9883

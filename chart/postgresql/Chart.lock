@@ -1,6 +1,6 @@
 dependencies:
 - name: postgresql
   repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 3.1.1
-digest: sha256:8e2136aec5b1a15b67eda68c9ec20c6a3f05f43017446fa9d614d89f197041b5
-generated: "2022-06-07T01:06:44.44455888Z"
+  version: 3.2.4
+digest: sha256:c92423a525ec7e3f83a0d371815ebc1c1cb156717c0aa52ac62c1a812171f98e
+generated: "2022-12-02T18:30:45.600687735Z"

@@ -1,6 +1,6 @@
 dependencies:
 - name: enterprise-console-web
   repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 1.38.3
-digest: sha256:c82a21a28fd8927b60ccf1dac80b1be2f67c2e602583755dc2a82945444a909f
-generated: "2022-09-21T20:51:30.332160749Z"
+  version: 1.44.14
+digest: sha256:5056e4660a526d0d41b06ccd43049071cfec8d0ab94cbd687aa44ed1eae3824f
+generated: "2022-12-08T20:31:55.720263866Z"

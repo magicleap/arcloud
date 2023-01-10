@@ -176,6 +176,13 @@ opentelemetry-collector:
       servicePort: 19100
       hostPort: 19100
       protocol: TCP
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1
+      memory: 2Gi
   config:
     receivers:
       otlp:

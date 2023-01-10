@@ -142,15 +142,26 @@ keycloak:
           - get
           - list
 
+licensing:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
 mapping:
   meshing:
     resources:
       requests:
-        cpu: 2
-        memory: 4Gi
+        cpu: 4
+        memory: 8Gi
       # limits:
-      #   cpu: 4
-      #   memory: 8Gi
+      #   cpu: 8
+      #   memory: 16Gi
     scratchVolume:
       storageSize: 50Gi
   spiff:
@@ -240,6 +251,17 @@ streaming:
       #   memory: 2Gi
 
 space-proxy:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 1
+        memory: 1Gi
+      # limits:
+      #   cpu: 2
+      #   memory: 2Gi
+
+events:
   deployment:
     replicas: 3
     resources:

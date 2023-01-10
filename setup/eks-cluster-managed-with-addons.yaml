@@ -1,0 +1,35 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: $AWS_CLUSTER_NAME
+  region: $AWS_REGION
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+  - metadata:
+      name: aws-load-balancer-controller
+      namespace: kube-system
+    wellKnownPolicies:
+      awsLoadBalancerController: true
+
+managedNodeGroups:
+  - name: mng-1
+    instanceType: m5.large
+    desiredCapacity: 4
+    volumeSize: 100
+    ssh:
+      allow: true # this will use ~/.ssh/id_rsa.pub as the default ssh key
+    iam:
+      withAddonPolicies:
+        ebs: true
+        awsLoadBalancerController: true
+
+addons: # if no version is specified the default one is deployed
+- name: vpc-cni
+  attachPolicyARNs:
+    - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+- name: aws-ebs-csi-driver
+  wellKnownPolicies:
+    ebsCSIController: true

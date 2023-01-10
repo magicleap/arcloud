@@ -4,7 +4,7 @@ metadata:
   name: istio-gateway
 spec:
   dnsNames:
-  - {your-domain}
+  - ${DOMAIN}
   issuerRef:
     kind: Issuer
     name: letsencrypt

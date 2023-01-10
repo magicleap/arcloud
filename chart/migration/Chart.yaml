@@ -15,16 +15,16 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # NOTE: do not manually edit this value. it is edited by the CI/CD pipeline
-version: 0.8.2
+version: 0.9.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
 # NOTE: do not manually edit this value. it is edited by the CI/CD pipeline
-appVersion: 0.8.2
+appVersion: 0.9.0
 
 dependencies:
   - name: migration
-    version: 0.8.2
+    version: 0.9.0
     repository: https://registry.magicleap.io/chartrepo/connected-services/
     # version: 0.0.0
     # repository: file://../../../cs/migration/helm

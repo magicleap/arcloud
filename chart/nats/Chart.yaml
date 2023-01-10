@@ -14,16 +14,16 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.17.1
+version: 1.2.5
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 0.17.1
+appVersion: 1.2.5
 
 dependencies:
   - name: nats
-    version: 0.17.1
-    repository: https://nats-io.github.io/k8s/helm/charts/
+    version: 1.2.5
+    repository: https://registry.magicleap.io/chartrepo/enterprise/
     # version: 0.0.0
     # repository: file://../../../helm-charts/nats
     condition: nats.enabled
