@@ -84,7 +84,7 @@ export REGISTRY_USERNAME="your-registry-username"
 export REGISTRY_PASSWORD="your-registry-password"
 ```
 
-Alternatively, make a copy of the [env.example file](./env.example), update the values
+Alternatively, make a copy of the `./setup/env.example`, update the values
 and source it in your terminal:
 ```sh
 cp setup/env.example setup/env.my-cluster
@@ -184,7 +184,7 @@ The two options below are alternatives that can be used depending on your prefer
 
 ##### Option 1: Bare-bone cluster with non-managed node group
 
-Adjust the [eks-cluster.yaml](./eks-cluster.yaml) file to your needs and create the cluster:
+Adjust the `./setup/eks-cluster.yaml` file to your needs and create the cluster:
 ```sh
 cat ./setup/eks-cluster.yaml | envsubst | eksctl create cluster -f -
 ```
@@ -208,7 +208,7 @@ Complete the following guides to install additional required cluster components:
 
 ##### Option 2: Preconfigured cluster with managed node group and preinstalled add-ons
 
-Adjust the [eks-cluster-managed-with-addons.yaml](./eks-cluster-managed-with-addons.yaml) file to your needs and create
+Adjust the `./setup/eks-cluster-managed-with-addons.yaml` file to your needs and create
 the cluster:
 ```sh
 cat ./setup/eks-cluster-managed-with-addons.yaml | envsubst | eksctl create cluster -f -

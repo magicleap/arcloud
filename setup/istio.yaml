@@ -25,7 +25,7 @@ spec:
         k8s:
           replicaCount: 2
           service:
-            loadBalancerIP: ${IP_ADDRESS:-}
+            loadBalancerIP: ${IP_ADDRESS}
             ports:
               - name: http2
                 port: 80
