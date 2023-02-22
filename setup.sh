@@ -353,7 +353,7 @@ install_chart() {
     --namespace "$NAMESPACE" \
     $($DEBUG && echo "--debug") \
     $($DRY_RUN && echo "--dry-run") \
-    $(! $SECURE && echo "--set global.domainProtocol=http,global.domainPort=80,global.mqttProtocol=tcp,global.mqttPort=1883") \
+    $(! $SECURE && echo "--set global.domainProtocol=http,global.domainPort=80,global.mqttProtocol=tcp,global.mqttPort=1883,global.istio.gateway.ports.http=80,global.istio.gateway.ports.mqtt=1883") \
     "$chart" "$CHART_DIR/$chart" $HELM_PARAMS
 
   local stdout=$(cat $CHART_DIR/$chart/Chart.yaml | grep "appVersion:" | sed -e 's/appVersion: /v/')

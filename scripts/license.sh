@@ -341,7 +341,11 @@ parse_args() {
     debug "COMMAND: '$COMMAND'"
     debug "CURL_INSECURE: '$CURL_INSECURE'"
     debug "IN: '$IN'"
-    debug "LICENSE_KEY: '$LICENSE_KEY'"
+    if [ -n "$LICENSE_KEY" ]; then
+      debug "LICENSE_KEY: <redacted with ${#LICENSE_KEY} characters>"
+    else
+      debug "LICENSE_KEY: ''"
+    fi
     debug "OUT: '$OUT'"
     debug "PATH_PREFIX: '$PATH_PREFIX'"
     debug "REALM: '$REALM'"
@@ -400,13 +404,47 @@ open_url_in_browser() {
   esac
 }
 
+curl_fail_with_body() {
+  # we would just use the --fail-with-body option of curl, but this is not available in older versions, especially
+  # in environments like ubuntu (at this time).
+  # thus, this function just wraps curl, fails if the response code is not >= 200 and < 300, and writes out the response,
+  # failure or not (unless the curl call explicitly uses the --output|-o argument
+  local output_file=""
+  local output_is_temp
+  local http_code
+  for (( i=1; i<=$#; i++ )); do
+    case "${!i}" in
+      -o | --output )
+        i=$((i+1))
+        output_file="${!i}"
+        output_is_temp=false
+        ;;
+    esac
+  done
+  if [ -z "$output_file" ]; then
+    output_file=$(mktemp)
+    output_is_temp=true
+  fi
+  readonly output_file
+  readonly output_is_temp
+  readonly http_code=$(curl --silent --output "$output_file" --write-out "%{http_code}" "$@")
+  if [[ ${http_code} -lt 200 || ${http_code} -gt 299 ]] ; then
+    >&2 cat "$output_file"
+    return 22
+  fi
+  if $output_is_temp; then
+    cat "$output_file"
+    rm "$output_file"
+  fi
+}
+
 get_token() {
   local code
   local challenge
   readonly code="$1"
   readonly challenge="$2"
 
-  curl -sS --fail-with-body \
+  curl_fail_with_body -S \
     -X POST \
     "$ARCLOUD_URL/auth/realms/$REALM/protocol/openid-connect/token" \
     -d grant_type=authorization_code \
@@ -440,17 +478,31 @@ fi
 
 get_license() {
   # shellcheck disable=SC2046
-  curl \
-    -s --fail-with-body \
+  curl_fail_with_body \
     $(if $CURL_INSECURE; then echo '--insecure'; fi) \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     "${ARCLOUD_URL}${PATH_PREFIX}v1/license"
 }
 
+redact_license_key_in_json() {
+  local info
+  local license_key
+  readonly info="$1"
+  readonly license_key="$(echo "$info" | jq -r '.license_key // empty')"
+  if [ -n "$license_key" ]; then
+    echo "$info" | jq -c ".license_key=\"<redacted with ${#license_key} characters>\""
+  else
+    echo "$info"
+  fi
+}
+
 readonly LICENSE_JSON_INFO="$(get_license)"
-debug "LICENSE_JSON_INFO: '$LICENSE_JSON_INFO'"
 # validate the json output...
 echo "$LICENSE_JSON_INFO" | jq > /dev/null || fatal "$LICENSE_JSON_INFO"
+debug "LICENSE_JSON_INFO: '$(redact_license_key_in_json "$LICENSE_JSON_INFO")'"
+if [ -z "$LICENSE_JSON_INFO" ]; then
+  fatal "could not get current license output"
+fi
 
 license_key_must_be_configured() {
   local license_key
@@ -509,8 +561,7 @@ case "${COMMAND}" in
       data="{\"active\":true,\"license_key\":\"${LICENSE_KEY}\"}"
     fi
     # shellcheck disable=SC2046
-    curl -X PATCH \
-      -s --fail-with-body \
+    curl_fail_with_body -X PATCH \
       $(if $CURL_INSECURE; then echo '--insecure'; fi) \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       -H "Content-Type: application/json" \
@@ -522,8 +573,7 @@ case "${COMMAND}" in
     license_key_must_be_configured
     # shellcheck disable=SC2046
     # shellcheck disable=SC2030
-    curl \
-      -s --fail-with-body \
+    curl_fail_with_body \
       $(if $CURL_INSECURE; then echo '--insecure'; fi) \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       -H "Content-Type: application/octet-stream" \
@@ -555,8 +605,7 @@ case "${COMMAND}" in
       data="{\"license_key\":\"${LICENSE_KEY}\",\"active\":${ACTIVE}}"
     fi
     # shellcheck disable=SC2046
-    curl -X PATCH \
-      -s --fail-with-body \
+    curl_fail_with_body -X PATCH \
       $(if $CURL_INSECURE; then echo '--insecure'; fi) \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       -H "Content-Type: application/json" \
@@ -567,8 +616,7 @@ case "${COMMAND}" in
     must_be_online_mode "download-offline-deactivation-request"
     license_key_must_be_configured
     # shellcheck disable=SC2046
-    curl -X PATCH \
-      -s --fail-with-body \
+    curl_fail_with_body -X PATCH \
       $(if $CURL_INSECURE; then echo '--insecure'; fi) \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       -H "Content-Type: application/json" \
@@ -580,8 +628,7 @@ case "${COMMAND}" in
     license_key_must_be_configured
     # shellcheck disable=SC2046
     # shellcheck disable=SC2031
-    curl \
-      -s --fail-with-body \
+    curl_fail_with_body \
       $(if $CURL_INSECURE; then echo '--insecure'; fi) \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       -H "Content-Type: application/octet-stream" \
@@ -595,8 +642,7 @@ case "${COMMAND}" in
     must_be_offline_mode "activate-online"
     license_key_must_be_configured
     # shellcheck disable=SC2046
-    curl -X POST \
-      -s --fail-with-body \
+    curl_fail_with_body -X POST \
       $(if $CURL_INSECURE; then echo '--insecure'; fi) \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       -H "Content-Type: application/octet-stream" \
