@@ -3,7 +3,8 @@
 ########################################################
 
 global:
-  version: 1.7.86
+  name: ''
+  version: 1.13.22
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -17,6 +18,10 @@ global:
   imagePullSecrets:
     - name: container-registry
   istio:
+    gateway:
+      ports:
+        http: 443
+        mqtt: 8883
     virtualService:
       gateways:
         - istio-system/istio-gateway
@@ -29,6 +34,7 @@ global:
     port: 5432
   minio:
     endpoint: http://minio:80
+    healthEndpoint: http://minio:80/minio/health/live
   bucket: arcloud
   offline: false
   licensing:
@@ -38,14 +44,18 @@ global:
     bucket: device-gateway
     http:
       port: 8289
+  deviceSession:
+    http:
+      port: 8189
+  ##############################
+  # EXPERIMENTAL FEATURE FLAGS #
+  ##############################
+  # Feature flags are experimental, and are NOT supported. DO NOT enable
+  # these on a non-experimental system.
   features:
     mapMerge: true
-    ##################################################
-    #           EXPERIMENTAL FEATURE FLAGS           #
-    ##################################################
-    # The following feature flags are experimental.
-    # DO NOT enable these on non-experimental systems.
-    spaceMeshing: false
+    spaceMeshing: true
+    licensing: false
 
 #############
 # TEMPLATES #
@@ -61,7 +71,26 @@ x-imagePullSecrets: &imagePullSecrets |
   {{ toYaml . }}
   {{- end }}
 
+x-podSecurityContext: &podSecurityContext
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
 x-securityContext: &securityContext
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL 
+
+# TODO: Will remove once streaming version > 0.48.3 is merged 
+x-legacySecurityContext: &legacySecurityContext
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
@@ -136,6 +165,7 @@ opa-istio-device:
     extraArgs: *opaExtraArgs
   scuttle: *scuttle
   kubexit: *kubexit
+  deviceSessionsUrl: "http://device-gateway.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.global.deviceSession.http.port }}/v0/device-sessions"
 
 minio:
   image:
@@ -211,6 +241,32 @@ minio:
         }
   persistence:
     storageSize: 30Gi
+  users:
+    - accesskey: mapping
+      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
+      existingSecret: ""
+      policy: readwrite
+      purge: false
+    - accesskey: streaming
+      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
+      existingSecret: ""
+      policy: readwrite
+      purge: false
+    - accesskey: device-gateway
+      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
+      existingSecret: ""
+      policy: consoleAdmin
+      purge: true
+    - accesskey: arcloud-dashboards
+      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
+      existingSecret: ""
+      policy: readwrite
+      purge: false
+    - accesskey: licensing
+      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
+      existingSecret: ""
+      policy: readwrite
+      purge: false
 
 nats:
   nats:
@@ -252,6 +308,12 @@ nats:
                 subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
               existingSecret: ""
             - user: session-manager
+              password: "" # Defaults to random alpha numeric 32 character value
+              permissions:
+                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+              existingSecret: ""
+            - user: events
               password: "" # Defaults to random alpha numeric 32 character value
               permissions:
                 publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
@@ -310,6 +372,11 @@ postgresql:
     existingSecret: ""
     database: arcloud
     role: readwrite
+  - username: events
+    password: "" # When unset defaults to a random alpha numeric 32 character value
+    existingSecret: ""
+    database: arcloud
+    role: readwrite
   # device-gateway
   - username: device_session
     password: "" # When unset defaults to a random alpha numeric 32 character value
@@ -341,18 +408,18 @@ postgresql:
 device-gateway:
   image:
     repository: "{{ .Values.global.image.registry }}/device-gateway"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
-  migrations:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   service:
     deviceGateway:
       http:
         port: "{{ .Values.global.deviceGateway.http.port }}"
+    deviceSession:
+      port: "{{ .Values.global.deviceSession.http.port }}"
   istio:
     <<: *istio
     # NOTE: Device Gateway only needs the Keycloak JWKS rule, since it serves the device JWKS rule to Istio.
@@ -365,17 +432,19 @@ device-gateway:
       gateways: *istioGateways
       deviceGateway:
         mqtt:
-          ports:
-          - "{{ .Values.global.mqttPort }}"
+          port: "{{ .Values.global.istio.gateway.ports.mqtt }}"
         http:
           uriPrefix: /api/device-gateway/
           rewriteUri: /
+          port: "{{ .Values.global.istio.gateway.ports.http }}"
       devices:
         uriPrefix: /api/devices/
         rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
       crashReport:
         uriPrefix: /api/crash-report/
         rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -415,7 +484,7 @@ device-gateway:
     deviceSessionTokenKey: "" # Defaults to a random RSA private key
   fileService:
     backend: aws
-    existingSecret: minio
+    existingSecret: minio-device-gateway
     s3:
       scheme: http://
       host: minio
@@ -430,12 +499,10 @@ device-gateway:
 identity-backend:
   image:
     repository: "{{ .Values.global.image.registry }}/identity-backend"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
-  migrations:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -443,8 +510,10 @@ identity-backend:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /api/identity/
-      rewriteUri: /
+      http:
+        uriPrefix: /api/identity/
+        rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6  basePath: /api/identity/
   deploymentBundle: arcloud
@@ -481,12 +550,10 @@ identity-backend:
 keycloak:
   image:
     repository: "{{ .Values.global.image.registry }}/keycloak"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  statefulset:
-    securityContext: *securityContext
-  migrations:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -496,7 +563,9 @@ keycloak:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /auth/
+      http:
+        uriPrefix: /auth/
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   serviceAccount: *serviceAccount
   localRateLimit: *localRateLimit
   postgresql:
@@ -517,12 +586,13 @@ keycloak:
     clientSecret: "" # Defaults to a random uuid v4 value
 
 licensing:
+  clusterName: "{{ .Values.global.name }}"
   image:
     repository: "{{ .Values.global.image.registry }}/licensing"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -530,16 +600,19 @@ licensing:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /api/licensing/
-      rewriteUri: /
+      http:
+        uriPrefix: /api/licensing/
+        rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   # serviceAccount: *serviceAccount
   localRateLimit: *localRateLimit
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   objectStorage:
     endpoint: "{{ .Values.global.minio.endpoint }}"
+    healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
     bucket: "{{ $.Values.global.licensing.bucket }}"
-    existingSecret: minio
+    existingSecret: minio-licensing
   offline: "{{ $.Values.global.offline }}"
   licensingspring:
     env: "{{ $.Values.global.licensing.env }}"
@@ -547,6 +620,8 @@ licensing:
 mapping:
   image:
     repository: "{{ .Values.global.image.registry }}/mapping"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   meshing:
     enabled: "{{ .Values.global.features.spaceMeshing }}"
     image:
@@ -558,12 +633,6 @@ mapping:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
-  watchdog:
-    securityContext: *securityContext
-  worker:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -573,9 +642,11 @@ mapping:
       gateways: *istioGateways
       grpc:
         uriPrefix: /ARCloud.Mapping/
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
       http:
         uriPrefix: /api/mapping/
         rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -588,8 +659,9 @@ mapping:
     existingSecret: postgresql-mapping
   minio:
     endpoint: "{{ .Values.global.minio.endpoint }}"
+    healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
     bucket: "{{ $.Values.global.bucket }}"
-    existingSecret: minio
+    existingSecret: minio-mapping
   nats:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
@@ -601,12 +673,12 @@ mapping:
 migration:
   image:
     repository: "{{ .Values.global.image.registry }}/migration"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  migrations:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   serviceAccount:
@@ -620,12 +692,12 @@ migration:
 session-manager:
   image:
     repository: "{{ .Values.global.image.registry }}/session-manager"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -633,7 +705,13 @@ session-manager:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /ARCloud.SessionManager/
+      grpc:
+        uriPrefix: /ARCloud.SessionManager/
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
+      http:
+        uriPrefix: /api/session-manager/
+        rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -653,12 +731,12 @@ session-manager:
 spatial-anchors:
   image:
     repository: "{{ .Values.global.image.registry }}/spatial-anchors"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -666,7 +744,13 @@ spatial-anchors:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /ARCloud.SpatialAnchors/
+      grpc:
+        uriPrefix: /ARCloud.SpatialAnchors/
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
+      http:
+        uriPrefix: /api/spatial-anchors/
+        rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -686,6 +770,8 @@ spatial-anchors:
 streaming:
   image:
     repository: "{{ .Values.global.image.registry }}/streaming"
+  podSecurityContext: *podSecurityContext
+  securityContext: *legacySecurityContext
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
@@ -695,7 +781,6 @@ streaming:
   annotations: *annotations
   statefulset:
     replicas: 4
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -703,7 +788,10 @@ streaming:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /ARCloud.StreamingService/
+      http:
+        uriPrefix: /api/streaming/
+        rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -716,8 +804,9 @@ streaming:
     existingSecret: postgresql-streaming
   minio:
     endpoint: "{{ .Values.global.minio.endpoint }}"
+    healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
     bucket: "{{ $.Values.global.bucket }}"
-    existingSecret: minio
+    existingSecret: minio-streaming
   nats:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
@@ -730,10 +819,10 @@ streaming:
 space-proxy:
   image:
     repository: "{{ .Values.global.image.registry }}/space-proxy"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -741,7 +830,9 @@ space-proxy:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /ARCloud.SpaceWorkerService/
+      http:
+        uriPrefix: /ARCloud.SpaceWorkerService/
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -758,12 +849,12 @@ space-proxy:
 events:
   image:
     repository: "{{ .Values.global.image.registry }}/events"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -774,6 +865,7 @@ events:
       http:
         uriPrefix: /api/events/
         rewriteUri: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -783,12 +875,12 @@ events:
     host: "{{ .Values.global.postgresql.host }}"
     port: "{{ .Values.global.postgresql.port }}"
     database: arcloud
-    existingSecret: postgresql-mapping #add user for events
+    existingSecret: postgresql-events #add user for events
   nats:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
     clusterId: "{{ $.Values.global.nats.clusterID }}"
-    existingSecret: nats-js-mapping #add user for events
+    existingSecret: nats-js-events #add user for events
   tracing:
     enabled: false
   
@@ -800,10 +892,10 @@ events:
 enterprise-console-web:
   image:
     repository: "{{ .Values.global.image.registry }}/enterprise-console-web"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
-  deployment:
-    securityContext: *securityContext
   scuttle: *scuttle
   kubexit: *kubexit
   istio:
@@ -811,7 +903,9 @@ enterprise-console-web:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /
+      http:
+        uriPrefix: /
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   localRateLimit: *localRateLimit
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
@@ -839,6 +933,12 @@ enterprise-console-web:
         {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
         {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
         {{ printf "%s://%s%s%s" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
+    - name: ARCLOUD_DASHBOARDS_URL
+      value: |-
+        {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+        {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+        {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+        {{ printf "%s://%s%s%s/dashboards" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
     - name: QR_CODE_PORT
       value: "{{ .Values.global.mqttPort }}"
     - name: QR_CODE_PROTOCOL
@@ -849,10 +949,14 @@ enterprise-console-web:
       value: "{{ .Values.global.features.mapMerge | toString }}"
     - name: ARCLOUD_FEATURES_SPACE_MESHING
       value: "{{ .Values.global.features.spaceMeshing | toString }}"
+    - name: ARCLOUD_FEATURES_LICENSING
+      value: "{{ .Values.global.features.licensing | toString }}"
 
 arcloud-dashboards:
   image:
     repository: "{{ .Values.global.image.registry }}/arcloud-dashboards"
+  podSecurityContext: *podSecurityContext
+  securityContext: *securityContext
   imagePullSecrets: *imagePullSecrets
   annotations: *annotations
   scuttle: *scuttle
@@ -862,7 +966,9 @@ arcloud-dashboards:
     virtualService:
       enabled: true
       gateways: *istioGateways
-      uriPrefix: /dashboards/
+      http:
+        uriPrefix: /dashboards/
+        port: "{{ .Values.global.istio.gateway.ports.http }}"
   localRateLimit: *localRateLimit
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
@@ -876,4 +982,4 @@ arcloud-dashboards:
   minio:
     endpoint: "{{ .Values.global.minio.endpoint }}"
     bucket: "{{ .Values.global.bucket }}"
-    existingSecret: minio
+    existingSecret: minio-arcloud-dashboards

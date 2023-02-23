@@ -286,3 +286,14 @@ enterprise-console-web:
       # limits:
       #   cpu: 2
       #   memory: 2Gi
+
+arcloud-dashboards:
+  deployment:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 4
+        memory: 6Gi
+      # limits:
+      #   cpu: 6
+      #   memory: 8Gi

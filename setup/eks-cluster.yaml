@@ -11,4 +11,4 @@ nodeGroups:
     desiredCapacity: 4
     volumeSize: 100
     ssh:
-      allow: true # this will use ~/.ssh/id_rsa.pub as the default ssh key
+      allow: false
