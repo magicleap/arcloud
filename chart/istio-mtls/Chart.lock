@@ -1,6 +1,6 @@
 dependencies:
 - name: istio-mtls
   repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 0.0.3
-digest: sha256:2fdd1d9d8b2bede07036b1ebb7c3a5f46f1df95416f8d4b3e83b40ea16a73935
-generated: "2022-12-05T14:24:48.585495019Z"
+  version: 0.0.4
+digest: sha256:fb932ed5c1803013e07a3499d5bd787d00c8800627caa4acf58b27a9b3129985
+generated: "2023-01-07T22:53:40.00897394-05:00"
