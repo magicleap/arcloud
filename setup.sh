@@ -649,4 +649,6 @@ if ${PARALLEL}; then
   fi
 fi
 
-print_installation_info
+if ! $DRY_RUN; then
+    print_installation_info
+fi

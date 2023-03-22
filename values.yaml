@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.13.22
+  version: 1.15.11
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -88,13 +88,6 @@ x-securityContext: &securityContext
   capabilities:
     drop:
       - ALL 
-
-# TODO: Will remove once streaming version > 0.48.3 is merged 
-x-legacySecurityContext: &legacySecurityContext
-  runAsNonRoot: true
-  runAsUser: 1000
-  fsGroup: 1000
-  fsGroupChangePolicy: OnRootMismatch
 
 x-jwtRuleKeycloak: &jwtRuleKeycloak
   issuer: |-
@@ -771,7 +764,7 @@ streaming:
   image:
     repository: "{{ .Values.global.image.registry }}/streaming"
   podSecurityContext: *podSecurityContext
-  securityContext: *legacySecurityContext
+  securityContext: *securityContext
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
