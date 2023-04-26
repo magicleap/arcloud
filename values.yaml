@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.15.11
+  version: 1.19.12
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -54,7 +54,7 @@ global:
   # these on a non-experimental system.
   features:
     mapMerge: true
-    spaceMeshing: true
+    spaceMeshing: false
     licensing: false
 
 #############
@@ -334,12 +334,12 @@ postgresql:
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readonly
+    role: connect # Granting SQL privileges is managed by migration
   - username: mapping
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readwrite
+    role: connect # Granting SQL privileges is managed by migration
   - username: migration
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
@@ -349,27 +349,27 @@ postgresql:
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readwrite
+    role: connect # Granting SQL privileges is managed by migration
   - username: space_proxy
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readonly
+    role: connect # Granting SQL privileges is managed by migration
   - username: spatial_anchors
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readwrite
+    role: connect # Granting SQL privileges is managed by migration
   - username: streaming
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readwrite
+    role: connect # Granting SQL privileges is managed by migration
   - username: events
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: readwrite
+    role: connect # Granting SQL privileges is managed by migration
   # device-gateway
   - username: device_session
     password: "" # When unset defaults to a random alpha numeric 32 character value
@@ -393,6 +393,12 @@ postgresql:
     existingSecret: ""
     database: keycloak
     role: admin
+  # meshing 
+  - username: meshing 
+    password: "" # When unset defaults to a random alpha numeric 32 character value
+    existingSecret: ""
+    database: arcloud 
+    role: connect # Granting SQL privileges is managed by migration 
 
 ############
 # BACKENDS #
@@ -566,11 +572,17 @@ keycloak:
     port: "{{ .Values.global.postgresql.port }}"
     database: keycloak
     existingSecret: postgresql-keycloak
-  frontendUrl: |-
+  hostnameUrl: |-
     {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) -}}
     {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort -}}
     {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort -}}
     {{- printf "%s://%s%s%s/auth" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+  hostnameStrict: true
+  hostnameStrictHttps: '{{ (eq .Values.global.domainProtocol "https") | toString }}'
+  hostnameStrictBackchannel: true
+  proxy: edge
+  httpRelativePath: /auth
+  internalUrl: "http://keycloak/auth"
   proxyAddressForwarding: true
   username: admin
   password: "" # Defaults to a random alpha numeric 32 character value
@@ -619,6 +631,11 @@ mapping:
     enabled: "{{ .Values.global.features.spaceMeshing }}"
     image:
       repository: "{{ .Values.global.image.registry }}/meshing"
+    postgresql:
+      host: "{{ .Values.global.postgresql.host }}"
+      port: "{{ .Values.global.postgresql.port }}"
+      database: arcloud
+      existingSecret: postgresql-meshing
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
@@ -681,6 +698,109 @@ migration:
     port: "{{ .Values.global.postgresql.port }}"
     database: arcloud
     existingSecret: postgresql-migration
+  sqlAccess:
+    permittedPrivileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+    databaseGrants:
+      - database: arcloud
+        grants:
+          - username: arcloud_dashboards
+            scopes:
+              - table: cloud_maps
+                privileges: [ "SELECT" ]
+              - table: device_states
+                privileges: [ "SELECT" ]
+              - table: mapping_jobs
+                privileges: [ "SELECT" ]
+              - table: persistent_pose_mappings
+                privileges: [ "SELECT" ]
+              - table: persistent_poses
+                privileges: [ "SELECT" ]
+              - table: posed_sensor_data
+                privileges: [ "SELECT" ]
+              - table: sessions
+                privileges: [ "SELECT" ]
+              - table: space_workers
+                privileges: [ "SELECT" ]
+              - table: spaces
+                privileges: [ "SELECT" ]
+              - table: spatial_anchors
+                privileges: [ "SELECT" ]
+              - table: tracking_maps
+                privileges: [ "SELECT" ]
+          - username: events
+            scopes:
+              - table: events
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+          - username: mapping
+            scopes:
+              - table: cloud_maps
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: mapping_jobs
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: persistent_pose_mappings
+                privileges: [ "SELECT", "DELETE" ]
+              - table: persistent_poses
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: posed_sensor_data
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: sessions
+                privileges: [ "SELECT", "DELETE" ]
+              - table: space_locks
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: space_workers
+                privileges: [ "SELECT", "INSERT", "UPDATE" ]
+              - table: spaces
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: spatial_anchors
+                privileges: [ "SELECT", "DELETE" ]
+              - table: tracking_maps
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+          - username: session_manager
+            scopes:
+              - table: device_states
+                privileges: [ "SELECT", "INSERT", "UPDATE" ]
+              - table: sessions
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: space_workers
+                privileges: [ "SELECT", "INSERT", "UPDATE" ]
+              - table: spaces
+                privileges: [ "SELECT", "INSERT", "UPDATE" ]
+          - username: space_proxy
+            scopes:
+              - table: sessions
+                privileges: [ "SELECT" ]
+              - table: space_workers
+                privileges: [ "SELECT" ]
+          - username: spatial_anchors
+            scopes:
+              - table: cloud_maps
+                privileges: [ "SELECT" ]
+              - table: persistent_pose_mappings
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: persistent_poses
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: posed_sensor_data
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: spaces
+                privileges: [ "SELECT" ]
+              - table: spatial_anchors
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+          - username: streaming
+            scopes:
+              - table: cloud_maps
+                privileges: [ "SELECT" ]
+              - table: device_states
+                privileges: [ "SELECT", "INSERT", "UPDATE" ]
+              - table: posed_sensor_data
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+              - table: spaces
+                privileges: [ "SELECT" ]
+              - table: spatial_anchors
+                privileges: [ "SELECT" ]
+          - username: meshing
+            scopes:
+              - table: posed_sensor_data
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]     
 
 session-manager:
   image:

@@ -82,9 +82,9 @@ EOSQL
 EOSQL
 }
 
-function create_readwrite_role() {
+function create_connect_role() {
   local database=$1
-  local role="${database}_readwrite"
+  local role="${database}_connect"
   local schema="public"
 
   if ! [ "$( psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$role'" )" = '1' ]; then
@@ -100,30 +100,7 @@ EOSQL
     GRANT CONNECT ON DATABASE $database TO $role;
     GRANT USAGE ON SCHEMA $schema to $role;
 
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA $schema TO $role;
     GRANT USAGE ON ALL SEQUENCES IN SCHEMA $schema TO $role;
-EOSQL
-}
-
-function create_readonly_role() {
-  local database=$1
-  local role="${database}_readonly"
-  local schema="public"
-
-  if ! [ "$( psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$role'" )" = '1' ]; then
-    echo " Creating role '$role'"
-    psql -d "$database" <<-EOSQL
-      CREATE ROLE $role;
-EOSQL
-  else
-    echo " role '$role' already exists"
-  fi
-
-  psql -d "$database" <<-EOSQL
-    GRANT CONNECT ON DATABASE $database TO $role;
-    GRANT USAGE ON SCHEMA $schema to $role;
-
-    GRANT SELECT ON ALL TABLES IN SCHEMA $schema TO $role;
 EOSQL
 }
 
@@ -164,33 +141,14 @@ EOSQL
     ALTER DEFAULT PRIVILEGES FOR USER $user IN SCHEMA $schema GRANT ALL ON FUNCTIONS TO ${database}_admin;
     ALTER DEFAULT PRIVILEGES FOR USER $user IN SCHEMA $schema GRANT ALL ON TYPES TO ${database}_admin;
 
-    ALTER DEFAULT PRIVILEGES FOR USER $user IN SCHEMA $schema GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${database}_readwrite;
-    ALTER DEFAULT PRIVILEGES FOR USER $user IN SCHEMA $schema GRANT USAGE ON SEQUENCES TO ${database}_readwrite;
-
-    ALTER DEFAULT PRIVILEGES FOR USER $user IN SCHEMA $schema GRANT SELECT ON TABLES TO ${database}_readonly;
+    ALTER DEFAULT PRIVILEGES FOR USER $user IN SCHEMA $schema GRANT USAGE ON SEQUENCES TO ${database}_connect;
 EOSQL
 }
 
-function grant_readwrite_role() {
+function grant_connect_role() {
   local user=$1
   local database=$2
-  local role="${database}_readwrite"
-  local schema="public"
-
-  if ! [ "$( psql -tAc "SELECT 1 FROM pg_roles WHERE pg_has_role('$user', oid, 'member') AND rolname = '$role'" )" = '1' ]; then
-    echo " Assigning user '$user' role '$role'"
-    psql <<-EOSQL
-      GRANT $role TO $user;
-EOSQL
-  else
-    echo " role '$role' is already assigned to user '$user'"
-  fi
-}
-
-function grant_readonly_role() {
-  local user=$1
-  local database=$2
-  local role="${database}_readonly"
+  local role="${database}_connect"
   local schema="public"
 
   if ! [ "$( psql -tAc "SELECT 1 FROM pg_roles WHERE pg_has_role('$user', oid, 'member') AND rolname = '$role'" )" = '1' ]; then
@@ -260,30 +218,29 @@ for POSTGRES_DB in $(tr ',' ' ' <<< "$POSTGRES_DBS" | sed -e's/  */ /g' ); do
   create_database "$POSTGRES_DB" "$PGUSER"
   revoke_public "$POSTGRES_DB"
   create_admin_role "$POSTGRES_DB"
-  create_readwrite_role "$POSTGRES_DB"
-  create_readonly_role "$POSTGRES_DB"
+  create_connect_role "$POSTGRES_DB"
 done
 
 # AR Cloud
 create_postgis_extension "arcloud"
 #
 create_user "${ARCLOUD_MAPPING_USER}" "${ARCLOUD_MAPPING_PASSWORD}"
-grant_readwrite_role "${ARCLOUD_MAPPING_USER}" "arcloud"
+grant_connect_role "${ARCLOUD_MAPPING_USER}" "arcloud"
 #
 create_user "${ARCLOUD_MIGRATION_USER}" "${ARCLOUD_MIGRATION_PASSWORD}"
 grant_admin_role "${ARCLOUD_MIGRATION_USER}" "${ARCLOUD_MIGRATION_PASSWORD}" "arcloud"
 #
 create_user "${ARCLOUD_SESSION_MANAGER_USER}" "${ARCLOUD_SESSION_MANAGER_PASSWORD}"
-grant_readwrite_role "${ARCLOUD_SESSION_MANAGER_USER}" "arcloud"
+grant_connect_role "${ARCLOUD_SESSION_MANAGER_USER}" "arcloud"
 #
 create_user "${ARCLOUD_SPACE_PROXY_USER}" "${ARCLOUD_SPACE_PROXY_PASSWORD}"
-grant_readonly_role "${ARCLOUD_SPACE_PROXY_USER}" "arcloud"
+grant_connect_role "${ARCLOUD_SPACE_PROXY_USER}" "arcloud"
 #
 create_user "${ARCLOUD_SPATIAL_ANCHORS_USER}" "${ARCLOUD_SPATIAL_ANCHORS_PASSWORD}"
-grant_readwrite_role "${ARCLOUD_SPATIAL_ANCHORS_USER}" "arcloud"
+grant_connect_role "${ARCLOUD_SPATIAL_ANCHORS_USER}" "arcloud"
 #
 create_user "${ARCLOUD_STREAMING_USER}" "${ARCLOUD_STREAMING_PASSWORD}"
-grant_readwrite_role "${ARCLOUD_STREAMING_USER}" "arcloud"
+grant_connect_role "${ARCLOUD_STREAMING_USER}" "arcloud"
 
 # Device Gateway
 create_user "${DEVICE_SESSION_USER}" "${DEVICE_SESSION_PASSWORD}"
