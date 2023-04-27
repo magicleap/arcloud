@@ -1,6 +1,6 @@
 dependencies:
 - name: keycloak
   repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 1.22.3
-digest: sha256:7e541858a5957ebf8c257f0681495d35b259d4588af92cc3f4cfadfccb75456e
-generated: "2023-02-14T02:05:11.521034879Z"
+  version: 1.24.0
+digest: sha256:834cd1668bf7800fa869cfdf89bc37fd966359f772e4e03552dfc489e452d1c6
+generated: "2023-03-21T21:55:49.528572926Z"
