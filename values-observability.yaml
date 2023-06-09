@@ -2,6 +2,15 @@
 ####################### AR CLOUD #######################
 ########################################################
 
+#############
+# TEMPLATES #
+#############
+
+x-tracing: &tracing
+  enabled: true
+  endpoint: "opentelemetry-collector:4317"
+  insecure: true
+
 ############
 # BACKENDS #
 ############
@@ -12,10 +21,13 @@ device-gateway:
       value: "http://opentelemetry-collector:4318"
 
 mapping:
-  tracing:
-    enabled: true
-    endpoint: "opentelemetry-collector:4317"
-    insecure: true
+  tracing: *tracing
+
+object-anchors-api:
+  tracing: *tracing
+
+streaming:
+  tracing: *tracing
 
 #################
 # OBSERVABILITY #

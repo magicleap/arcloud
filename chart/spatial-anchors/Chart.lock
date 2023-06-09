@@ -1,6 +1,6 @@
 dependencies:
 - name: spatial-anchors
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.21.25
-digest: sha256:4536a4428866e013e5cf3bde1ff7cba864e425123205f586df446b30c7b18c3d
-generated: "2023-03-30T09:04:35.858533189Z"
+  version: 0.22.1
+digest: sha256:926b884a74c75499e4d29fb507c2f9a501c27ffb48b7d3901b291ac94e88a124
+generated: "2023-05-16T15:28:37.400264368Z"

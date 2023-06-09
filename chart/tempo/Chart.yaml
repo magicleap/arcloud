@@ -14,15 +14,15 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.15.4
+version: 1.0.3
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 0.15.4
+appVersion: 1.0.3
 
 dependencies:
   - name: tempo
-    version: 0.15.4
+    version: 1.0.3
     repository: https://grafana.github.io/helm-charts
     # version: 0.0.0
     # repository: file://../../../helm-charts/loki

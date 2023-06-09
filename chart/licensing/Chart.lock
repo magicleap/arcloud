@@ -1,6 +1,6 @@
 dependencies:
 - name: licensing
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.9.4
-digest: sha256:493d4f37d7dfbb1f524accdd60bdf5b7ce49f49cbe5e19623236c08ea3bd9fd1
-generated: "2023-02-27T20:23:07.182966746Z"
+  version: 0.10.0
+digest: sha256:3e8057147e614e2d66672451a886cefba51c1199b52e22cdb1dd87c87f242e91
+generated: "2023-05-15T18:24:07.527480909Z"
