@@ -192,6 +192,9 @@ ARCLOUD_SPATIAL_ANCHORS_PASSWORD='<insert password>'
 #
 ARCLOUD_STREAMING_USER='streaming'
 ARCLOUD_STREAMING_PASSWORD='<insert password>'
+#
+ARCLOUD_OBJECT_ANCHORS_API_USER='object_anchors_api'
+ARCLOUD_OBJECT_ANCHORS_API_PASSWORD='<insert password>'
 
 # Device Gateway
 DEVICE_SESSION_USER='device_session'
@@ -241,6 +244,9 @@ grant_connect_role "${ARCLOUD_SPATIAL_ANCHORS_USER}" "arcloud"
 #
 create_user "${ARCLOUD_STREAMING_USER}" "${ARCLOUD_STREAMING_PASSWORD}"
 grant_connect_role "${ARCLOUD_STREAMING_USER}" "arcloud"
+#
+create_user "${ARCLOUD_OBJECT_ANCHORS_API_USER}" "${ARCLOUD_OBJECT_ANCHORS_API_PASSWORD}"
+grant_connect_role "${ARCLOUD_OBJECT_ANCHORS_API_USER}" "arcloud"
 
 # Device Gateway
 create_user "${DEVICE_SESSION_USER}" "${DEVICE_SESSION_PASSWORD}"

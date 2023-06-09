@@ -14,15 +14,15 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 6.31.1
+version: 6.52.7
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 6.31.1
+appVersion: 6.52.7
 
 dependencies:
   - name: grafana
-    version: 6.31.1
+    version: 6.52.7
     repository: https://grafana.github.io/helm-charts
     # version: 0.0.0
     # repository: file://../../../helm-charts/grafana
