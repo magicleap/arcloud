@@ -1,6 +1,6 @@
 dependencies:
 - name: space-proxy
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.10.3
-digest: sha256:b6d74c36971082cf9ccccabbb597e77be77087f18012525acc461bd487e3b06c
-generated: "2023-05-11T19:54:57.503856983Z"
+  version: 0.9.3
+digest: sha256:036fa9b4fd5b415180d4e883a27678055a5fe461bd888e3b415a66d54d983da8
+generated: "2023-02-02T05:10:51.323751548Z"
