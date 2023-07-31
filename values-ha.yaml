@@ -121,10 +121,16 @@ keycloak:
       #   cpu: 1
       #   memory: 1Gi
   extraEnv: |
-    - name: KC_CACHE_STACK
-      value: kubernetes
-    - name: JAVA_OPTS_APPEND
-      value: "-Djgroups.dns.query=keycloak-headless.{{ .Values.global.namespace }}.svc.cluster.local"
+    - name: JGROUPS_DISCOVERY_PROTOCOL
+      value: kubernetes.KUBE_PING
+    - name: KUBERNETES_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: CACHE_OWNERS_COUNT
+      value: "3"
+    - name: CACHE_OWNERS_AUTH_SESSIONS_COUNT
+      value: "3"
   rbac:
     create: true
     rules:
@@ -256,17 +262,6 @@ space-proxy:
       #   memory: 2Gi
 
 events:
-  deployment:
-    replicas: 3
-    resources:
-      requests:
-        cpu: 1
-        memory: 1Gi
-      # limits:
-      #   cpu: 2
-      #   memory: 2Gi
-
-object-anchors-api:
   deployment:
     replicas: 3
     resources:
