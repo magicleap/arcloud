@@ -1,6 +1,6 @@
 dependencies:
 - name: object-anchors-api
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.10.0
-digest: sha256:e9fcfadc501711a4c53d7d2bde00cbd573b837a0bf8a661491b8e9f2d3eac9cb
-generated: "2023-05-25T14:43:58.402880812Z"
+  version: 0.12.1
+digest: sha256:dfa788bc435772867e53ff67e9d30c3fbc991bddca7e9938dd19edbfcdfe0c23
+generated: "2023-06-16T14:17:46.378561953Z"

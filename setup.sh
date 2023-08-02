@@ -48,6 +48,7 @@ MINIMAL=${MINIMAL:=false}
 CHARTS_SET=${CHARTS_SET:=false}
 NAMESPACE=${NAMESPACE:=arcloud}
 SECURE=${SECURE:=true}
+USE_GPUS="${USE_GPUS:=false}"
 OBSERVABILITY=${OBSERVABILITY:=true}
 PARALLEL=${PARALLEL:=true}
 UPDATE_DOCKER=${UPDATE_DOCKER:=false}
@@ -342,7 +343,7 @@ install_chart() {
   [[ $# -gt 1 ]] && wait=$2
   local images;
 
-  if [ ! "$(ls -A $CHART_DIR/$chart/charts/)" ] || $UPDATE_HELM ; then
+  if [ ! "$(ls -A "$CHART_DIR/$chart/charts/")" ] || $UPDATE_HELM ; then
     rm -f "$CHART_DIR/$chart"/charts/*.tgz
     rm -rf "$CHART_DIR/$chart"/tmpcharts
     silent helm dep update --skip-refresh "$CHART_DIR/$chart"
@@ -356,7 +357,7 @@ install_chart() {
     $(! $SECURE && echo "--set global.domainProtocol=http,global.domainPort=80,global.mqttProtocol=tcp,global.mqttPort=1883,global.istio.gateway.ports.http=80,global.istio.gateway.ports.mqtt=1883") \
     "$chart" "$CHART_DIR/$chart" $HELM_PARAMS
 
-  local stdout=$(cat $CHART_DIR/$chart/Chart.yaml | grep "appVersion:" | sed -e 's/appVersion: /v/')
+  local stdout=$(cat "$CHART_DIR/$chart/Chart.yaml" | grep "appVersion:" | sed -e 's/appVersion: /v/')
   if $UPDATE_HELM; then
     ok "[chart updated] ${chart} ${stdout}"
   else
@@ -396,6 +397,8 @@ FLAGS:
                           https://www.magicleap.com/software-license-agreement-ml2
                           By default, the SLA is not accepted, and the installation
                           cannot proceed.
+  --use-gpus [true|false] Specify whether CUDA-capable GPU hardware is present and should be leveraged
+                          by the cluster
   --debug                 Enable Helm verbose output (defaults is not to use verbose output)
   --installation-info     Display information about the cluster installation if system is up and running
   --dry-run               Print commands instead of running them
@@ -440,6 +443,15 @@ parse_args() {
       --minimal )
         MINIMAL=true
         shift
+        ;;
+      --use-gpus)
+        if [[ ! "${2:-}" || "${2:0:1}" = '-' ]]; then
+          USE_GPUS="true"
+          shift
+        else
+          USE_GPUS="$2"
+          shift 2
+        fi
         ;;
       --namespace)
         arg_required "${@}"
@@ -500,6 +512,21 @@ parse_args() {
     esac
   done
 
+  case "${USE_GPUS}" in
+    y|Y|yes|Yes|YES|true|True|TRUE )
+      USE_GPUS=true
+      ;;
+    n|N|no|No|NO|false|False|FALSE )
+      USE_GPUS=false
+      ;;
+    "" )
+      exit_usage "invalid required option --use-gpus [true|false]."
+      ;;
+    * )
+      exit_usage "could not parse USE_GPUS as boolean ${USE_GPUS}"
+      ;;
+  esac
+
   if ! $CHARTS_SET; then
     # shellcheck disable=SC2046
     for chart in $(prioritize_and_filter_charts $(list_charts)); do CHARTS+=("$chart"); done
@@ -508,6 +535,9 @@ parse_args() {
   HELM_PARAMS="-f $HOME_DIR/values.yaml"
   if $OBSERVABILITY; then
     HELM_PARAMS="$HELM_PARAMS -f $HOME_DIR/values-observability.yaml"
+  fi
+  if $USE_GPUS; then
+    HELM_PARAMS="$HELM_PARAMS -f $HOME_DIR/values-gpus.yaml"
   fi
   if [[ ${#VALUES[@]} -gt 0 ]]; then
     for values in "${VALUES[@]}"; do
@@ -521,6 +551,7 @@ parse_args() {
     done
   fi
 
+
   readonly VERBOSE
   readonly ACCEPT_SLA
   readonly DRY_RUN
@@ -531,6 +562,7 @@ parse_args() {
   readonly VALUES
   readonly SETS
   readonly MINIMAL
+  readonly USE_GPUS
   readonly NAMESPACE
   readonly OBSERVABILITY
   readonly PARALLEL
@@ -556,6 +588,7 @@ parse_args() {
     if [[ ${#VALUES[@]} -gt 0 ]]; then debug "VALUES (${#VALUES[@]}): ${VALUES[*]}"; else debug "no VALUES"; fi
     if [[ ${#SETS[@]} -gt 0 ]]; then debug "SETS (${#SETS[@]}): ${SETS[*]}"; else debug "no SETS"; fi
     debug "MINIMAL: $MINIMAL"
+    debug "USE_GPUS: $USE_GPUS"
     debug "NAMESPACE: $NAMESPACE"
     debug "OBSERVABILITY: $OBSERVABILITY"
     debug "PARALLEL: $PARALLEL"
