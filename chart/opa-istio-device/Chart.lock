@@ -1,6 +1,6 @@
 dependencies:
 - name: opa-istio-device
   repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 4.0.4
-digest: sha256:e1386cc098c034cc915888e6d38590b7ecc0b85398c972578488b1a03acb75a0
-generated: "2023-01-07T22:53:56.197551182-05:00"
+  version: 4.0.5
+digest: sha256:96a217ebec5ea170feb7134be9793720251c2c6b39d1d11b33a82d4488685e84
+generated: "2023-06-08T20:11:14.589190374Z"

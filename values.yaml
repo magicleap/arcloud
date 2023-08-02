@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.21.13
+  version: 1.24.15
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -56,6 +56,8 @@ global:
     mapMerge: true
     spaceMeshing: false
     licensing: false
+    peopleExclusion: false
+    meshPreview: false
 
 #############
 # TEMPLATES #
@@ -652,6 +654,8 @@ mapping:
     enabled: "{{ .Values.global.features.spaceMeshing }}"
     image:
       repository: "{{ .Values.global.image.registry }}/meshing"
+    peopleExclusion:
+      enabled: "{{ .Values.global.features.peopleExclusion }}"
     postgresql:
       host: "{{ .Values.global.postgresql.host }}"
       port: "{{ .Values.global.postgresql.port }}"
@@ -989,6 +993,8 @@ streaming:
   server:
     streamscheck:
       tickerDurationSec: 300
+  sensorstreaming:
+    enabled: "{{ .Values.global.features.spaceMeshing }}"
 
 space-proxy:
   image:
@@ -1082,56 +1088,49 @@ enterprise-console-web:
   localRateLimit: *localRateLimit
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
-  # TODO: Create first class Next-Auth properties
-  extraEnv: |
-    - name: AR_API_URL
-      value: |-
-        {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
-        {{ printf "%s://%s%s%s/api" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
-    - name: KEYCLOAK_CLIENT_ID
-      value: com.magicleap.web.enterpriseportal
-    - name: KEYCLOAK_DOMAIN
-      value: |-
-        {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
-        {{ printf "%s://%s%s%s/auth/realms/magicleap/protocol/openid-connect" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
-    - name: KEYCLOAK_DOMAIN_INTERNAL
-      value: http://keycloak/auth/realms/magicleap/protocol/openid-connect
-    - name: NEXTAUTH_URL
-      value: |-
-        {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
-        {{ printf "%s://%s%s%s" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
-    - name: ARCLOUD_DASHBOARDS_URL
-      value: |-
-        {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
-        {{ printf "%s://%s%s%s/dashboards" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
-    - name: OIDC_ISSUER_URL
-      value: |-
-        {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
-        {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
-        {{ printf "%s://%s%s%s/auth/realms/magicleap" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort }}
-    - name: QR_CODE_PORT
-      value: "{{ .Values.global.mqttPort }}"
-    - name: QR_CODE_PROTOCOL
-      value: "{{ .Values.global.mqttProtocol }}"
-    - name: ARCLOUD_BUNDLE_VERSION
-      value: "{{ .Values.global.version }}"
-    - name: ARCLOUD_FEATURES_MAPMERGE
-      value: "{{ .Values.global.features.mapMerge | toString }}"
-    - name: ARCLOUD_FEATURES_SPACE_MESHING
-      value: "{{ .Values.global.features.spaceMeshing | toString }}"
-    - name: ARCLOUD_FEATURES_LICENSING
-      value: "{{ .Values.global.features.licensing | toString }}"
-    - name: ARCLOUD_FEATURES_USER_AUTHENTICATION_DISABLED
-      value: "{{ ((.Values.global.features.userAuthentication).disabled) | default false }}"
+  arApiUrl: |-
+    {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+    {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+    {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+    {{- printf "%s://%s%s%s/api" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+  keycloak:
+    clientId: com.magicleap.web.enterpriseportal
+    domain: |-
+      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+      {{- printf "%s://%s%s%s/auth/realms/magicleap/protocol/openid-connect" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+    domainInternal: http://keycloak/auth/realms/magicleap/protocol/openid-connect
+  nextAuth:
+    url: |-
+      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+      {{- printf "%s://%s%s%s" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+  arcloudDashboards:
+    url: |-
+      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+      {{- printf "%s://%s%s%s/dashboards" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+  service:
+    oidcIssuerUrl: |-
+      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+      {{- printf "%s://%s%s%s/auth/realms/magicleap" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+  mqtt:
+    port: "{{ .Values.global.mqttPort }}"
+    protocol: "{{ .Values.global.mqttProtocol }}"
+  arcloudBundle:
+    version: 1.24.15
+    features:
+      mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
+      spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"
+      licensing: "{{ .Values.global.features.licensing | toString }}"
+      userAuthenticationDisabled: "{{ ((.Values.global.features.userAuthentication).disabled) | default false }}"
+      peopleExclusion: "{{ .Values.global.features.peopleExclusion | toString }}"
+      meshPreview: "{{ .Values.global.features.meshPreview | toString }}"
 
 arcloud-dashboards:
   image:
