@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.24.15
+  version: 1.26.17
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -265,11 +265,6 @@ minio:
       existingSecret: ""
       policy: readwrite
       purge: false
-    - accesskey: object-anchors-api
-      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
-      existingSecret: ""
-      policy: readwrite
-      purge: false
 
 nats:
   nats:
@@ -322,12 +317,6 @@ nats:
                 publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
                 subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
               existingSecret: ""
-            - user: object-anchors-api
-              password: "" # Defaults to random alpha numeric 32 character value
-              permissions:
-                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-              existingSecret: ""
 
 postgresql:
   imagePullSecrets: *imagePullSecrets
@@ -338,7 +327,6 @@ postgresql:
     - devices_service
     - keycloak
     - identity
-    - object_anchors
   postgis:
     - arcloud
   username: postgres
@@ -412,12 +400,6 @@ postgresql:
     role: admin
   # meshing
   - username: meshing
-    password: "" # When unset defaults to a random alpha numeric 32 character value
-    existingSecret: ""
-    database: arcloud
-    role: connect # Granting SQL privileges is managed by migration
-  # object-anchors-api
-  - username: object_anchors_api
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
@@ -784,34 +766,6 @@ migration:
                 privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
               - table: object_classes
                 privileges: [ "SELECT", "UPDATE" ]
-          - username: object_anchors_api
-            scopes:
-              - table: cloud_maps
-                privileges: [ "SELECT" ]
-              - table: object_class_detection_jobs
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: object_classes
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: object_detection_jobs
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: object_detector_training_jobs
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: object_meshes
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: object_recordings
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: persistent_pose_mappings
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: persistent_poses
-                privileges: [ "SELECT" ]
-              - table: posed_sensor_data
-                privileges: [ "SELECT" ]
-              - table: space_object_classes
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: spaces
-                privileges: [ "SELECT", "UPDATE" ]
-              - table: spatial_anchors
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
           - username: session_manager
             scopes:
               - table: device_states
@@ -985,6 +939,9 @@ streaming:
     healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
     bucket: "{{ $.Values.global.bucket }}"
     existingSecret: minio-streaming
+    download:
+      partSize: 20971520
+      concurrency: 20
   nats:
     host: "{{ .Values.global.nats.host }}"
     port: "{{ .Values.global.nats.port }}"
@@ -993,8 +950,6 @@ streaming:
   server:
     streamscheck:
       tickerDurationSec: 300
-  sensorstreaming:
-    enabled: "{{ .Values.global.features.spaceMeshing }}"
 
 space-proxy:
   image:
@@ -1123,7 +1078,7 @@ enterprise-console-web:
     port: "{{ .Values.global.mqttPort }}"
     protocol: "{{ .Values.global.mqttProtocol }}"
   arcloudBundle:
-    version: 1.24.15
+    version: 1.26.17
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"
@@ -1163,51 +1118,3 @@ arcloud-dashboards:
     endpoint: "{{ .Values.global.minio.endpoint }}"
     bucket: "{{ .Values.global.bucket }}"
     existingSecret: minio-arcloud-dashboards
-
-object-anchors-api:
-  image:
-    repository: "{{ .Values.global.image.registry }}/object-anchors-api"
-  podSecurityContext: *podSecurityContext
-  securityContext: *securityContext
-  log:
-    level: DEBUG
-  imagePullSecrets: *imagePullSecrets
-  annotations: *annotations
-  scuttle: *scuttle
-  kubexit: *kubexit
-  istio:
-    <<: *istio
-    virtualService:
-      enabled: true
-      gateways: *istioGateways
-      grpc:
-        uriPrefixes:
-          - /ARCloud.ObjectInferenceService/
-          - /ARCloud.ObjectTrainingService/
-        port: "{{ .Values.global.istio.gateway.ports.http }}"
-      http:
-        uriPrefix: /api/object-anchors/
-        rewriteUri: /
-        port: "{{ .Values.global.istio.gateway.ports.http }}"
-  opa: *opa
-  opaIstio: *opa # TODO: Remove after common v6
-  serviceAccount:
-    create: true
-  localRateLimit: *localRateLimit
-  postgresql:
-    host: "{{ .Values.global.postgresql.host }}"
-    port: "{{ .Values.global.postgresql.port }}"
-    database: arcloud
-    existingSecret: postgresql-object-anchors-api
-  objectStorage:
-    endpoint: "{{ .Values.global.minio.endpoint }}"
-    healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
-    bucket: "{{ $.Values.global.bucket }}"
-    existingSecret: minio-object-anchors-api
-  nats:
-    host: "{{ .Values.global.nats.host }}"
-    port: "{{ .Values.global.nats.port }}"
-    clusterId: "{{ $.Values.global.nats.clusterID }}"
-    existingSecret: nats-js-object-anchors-api
-  tracing:
-    enabled: false
