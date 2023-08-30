@@ -1,6 +1,6 @@
 dependencies:
 - name: session-manager
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.29.3
-digest: sha256:2d2b70184595a6a4edff60bf6a8a20c20ea25a197324a7764a2f978e174994be
-generated: "2023-06-27T22:53:37.481806349Z"
+  version: 0.31.0
+digest: sha256:2d7202403e3880ffae2d81ac2dcb25e17da404c415ca99437662b3b912c51edb
+generated: "2023-08-10T18:22:28.13643885Z"

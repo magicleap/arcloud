@@ -266,17 +266,6 @@ events:
       #   cpu: 2
       #   memory: 2Gi
 
-object-anchors-api:
-  deployment:
-    replicas: 3
-    resources:
-      requests:
-        cpu: 1
-        memory: 1Gi
-      # limits:
-      #   cpu: 2
-      #   memory: 2Gi
-
 #############
 # FRONTENDS #
 #############
