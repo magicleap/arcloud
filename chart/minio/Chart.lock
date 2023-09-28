@@ -1,6 +1,6 @@
 dependencies:
 - name: minio
   repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 1.12.1
-digest: sha256:e8739ad2e758b836782adfdf1cf14662fe5365276d39258dc7e05dc7727d8a1e
-generated: "2023-07-07T18:25:43.922474652Z"
+  version: 1.13.0
+digest: sha256:1202a48cd31c570014f02bcd0761602435b5a8c7c492402d064277fcfa5f288b
+generated: "2023-08-23T08:20:32.022147945Z"
