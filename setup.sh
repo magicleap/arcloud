@@ -154,6 +154,9 @@ print_installation_info() {
     fatal "Failed to retrieve web console hostname"
   fi
 
+  local storage=$(kubectl get virtualservice \
+    --namespace $NAMESPACE minio --output=jsonpath='{.spec.hosts[0]}' 2>/dev/null || echo "")
+
   if $OBSERVABILITY; then
     local grafana_username=$(kubectl get secrets/grafana -n $NAMESPACE \
       --template='{{ index .data "admin-user" }}' | base64 -d || echo "")
@@ -181,13 +184,15 @@ print_installation_info() {
   echo ""
   yellow "Username: ${keycloak_username}\nPassword: ${keycloak_password}"
   echo ""
-  echo "MinIO:"
-  echo "------"
-  yellow "kubectl -n ${NAMESPACE} port-forward svc/minio 8082:81"
-  yellow "http://127.0.0.1:8082/"
-  echo ""
-  yellow "Username: ${minio_username}\nPassword: ${minio_password}"
-  echo ""
+  if [[ -n "${storage}" ]]; then
+    echo "MinIO:"
+    echo "------"
+    yellow "kubectl -n ${NAMESPACE} port-forward svc/minio 8082:81"
+    yellow "http://127.0.0.1:8082/"
+    echo ""
+    yellow "Username: ${minio_username}\nPassword: ${minio_password}"
+    echo ""
+  fi
   echo "PostgreSQL:"
   echo "------"
   yellow "kubectl -n ${NAMESPACE} port-forward svc/postgresql 5432:5432"

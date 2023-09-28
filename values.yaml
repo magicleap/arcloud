@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.26.17
+  version: 1.28.37
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -33,13 +33,12 @@ global:
     host: postgresql
     port: 5432
   minio:
+    # used to set an external endpoint in mapping for signed URLs with minio (not needed otherwise)
+    enabled: true
     endpoint: http://minio:80
     healthEndpoint: http://minio:80/minio/health/live
   bucket: arcloud
   offline: false
-  licensing:
-    bucket: licensing
-    env: PRODUCTION
   deviceGateway:
     bucket: device-gateway
     http:
@@ -55,7 +54,6 @@ global:
   features:
     mapMerge: true
     spaceMeshing: false
-    licensing: false
     peopleExclusion: false
     meshPreview: false
 
@@ -121,7 +119,7 @@ x-istioGateways: &istioGateways |
   {{- end }}
 
 x-istio: &istio
-  hosts:
+  hosts: &istioHosts
     - "{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}"
   requestAuthentication:
     enabled: true
@@ -180,8 +178,19 @@ minio:
   accessKey: "" # Defaults to a random alpha numeric 20 character value
   secretKey: "" # Defaults to a random alpha numeric 40 character value
   istio:
+    hosts: *istioHosts
+    requestAuthentication:
+      enabled: false
     virtualService:
-        enabled: true
+      enabled: true
+      gateways: *istioGateways
+    serviceEntry:
+      enabled: false
+      # ports need to be defined as string to allow value for number to be an integer instead of a string
+      ports: |-
+        - name: http
+          number: {{ .Values.global.domainPort }}
+          protocol: {{ .Values.global.domainProtocol | upper }}
   buckets:
     - name: "{{ $.Values.global.deviceGateway.bucket }}"
       policy: none
@@ -204,9 +213,6 @@ minio:
                 }
             ]
         }
-    - name: "{{ $.Values.global.licensing.bucket }}"
-      policy: none
-      purge: false
     - name: loki
       policy: none
       purge: false
@@ -256,11 +262,6 @@ minio:
       policy: consoleAdmin
       purge: true
     - accesskey: arcloud-dashboards
-      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
-      existingSecret: ""
-      policy: readwrite
-      purge: false
-    - accesskey: licensing
       secretkey: "" # When unset defaults to a random alpha numeric 32 character value
       existingSecret: ""
       policy: readwrite
@@ -595,38 +596,6 @@ keycloak:
     clientId: com.magicleap.api.identity
     clientSecret: "" # Defaults to a random uuid v4 value
 
-licensing:
-  clusterName: "{{ .Values.global.name }}"
-  image:
-    repository: "{{ .Values.global.image.registry }}/licensing"
-  podSecurityContext: *podSecurityContext
-  securityContext: *securityContext
-  imagePullSecrets: *imagePullSecrets
-  annotations: *annotations
-  scuttle: *scuttle
-  kubexit: *kubexit
-  istio:
-    <<: *istio
-    virtualService:
-      enabled: true
-      gateways: *istioGateways
-      http:
-        uriPrefix: /api/licensing/
-        rewriteUri: /
-        port: "{{ .Values.global.istio.gateway.ports.http }}"
-  # serviceAccount: *serviceAccount
-  localRateLimit: *localRateLimit
-  opa: *opa
-  opaIstio: *opa # TODO: Remove after common v6
-  objectStorage:
-    endpoint: "{{ .Values.global.minio.endpoint }}"
-    healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
-    bucket: "{{ $.Values.global.licensing.bucket }}"
-    existingSecret: minio-licensing
-  offline: "{{ $.Values.global.offline }}"
-  licensingspring:
-    env: "{{ $.Values.global.licensing.env }}"
-
 mapping:
   image:
     repository: "{{ .Values.global.image.registry }}/mapping"
@@ -646,6 +615,7 @@ mapping:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
+      tag: ar-spiff-cpp
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
@@ -676,6 +646,7 @@ mapping:
     existingSecret: postgresql-mapping
   minio:
     endpoint: "{{ .Values.global.minio.endpoint }}"
+    externalEndpoint: "{{ if .Values.global.minio.enabled }}{{ .Values.global.domainProtocol }}://{{ .Values.global.domainPrefix }}{{ .Values.global.domain }}{{ end }}"
     healthEndpoint: "{{ .Values.global.minio.healthEndpoint }}"
     bucket: "{{ $.Values.global.bucket }}"
     existingSecret: minio-mapping
@@ -766,6 +737,8 @@ migration:
                 privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
               - table: object_classes
                 privileges: [ "SELECT", "UPDATE" ]
+              - table: support_data
+                privileges: [ "SELECT" ]
           - username: session_manager
             scopes:
               - table: device_states
@@ -905,6 +878,7 @@ streaming:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
+      tag: ar-spiff-cpp
   log:
     level: DEBUG
   tracing:
@@ -1078,11 +1052,10 @@ enterprise-console-web:
     port: "{{ .Values.global.mqttPort }}"
     protocol: "{{ .Values.global.mqttProtocol }}"
   arcloudBundle:
-    version: 1.26.17
+    version: 1.28.37
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"
-      licensing: "{{ .Values.global.features.licensing | toString }}"
       userAuthenticationDisabled: "{{ ((.Values.global.features.userAuthentication).disabled) | default false }}"
       peopleExclusion: "{{ .Values.global.features.peopleExclusion | toString }}"
       meshPreview: "{{ .Values.global.features.meshPreview | toString }}"

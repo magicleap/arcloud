@@ -1,6 +1,6 @@
 dependencies:
 - name: events
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.7.0
-digest: sha256:c0b69e2e53b4595d892fcc7a8f1c10584e1683dabe8232a27796528be267fa4f
-generated: "2023-08-10T18:10:50.964374358Z"
+  version: 0.7.1
+digest: sha256:56c49f0a954685f74e6f6154495be9f9ca896dc70ed87d06823e8d11d8afcb2f
+generated: "2023-08-14T18:21:06.564488284Z"
