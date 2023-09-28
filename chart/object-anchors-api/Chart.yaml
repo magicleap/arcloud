@@ -14,15 +14,16 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.6.2
+version: 0.12.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 0.6.2
+appVersion: 0.12.1
 
 dependencies:
-  - name: events
-    version: 0.6.2
+  - name: object-anchors-api
+    version: 0.12.1
     repository: https://registry.magicleap.io/chartrepo/connected-services/
-    # repository: file://../../../../../cs/events/helm
-    condition: events.enabled
+    #version: 0.0.0
+    #repository: file://../../../object-anchors-api/helm
+    #condition: object-anchors-api.enabled

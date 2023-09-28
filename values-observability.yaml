@@ -23,6 +23,9 @@ device-gateway:
 mapping:
   tracing: *tracing
 
+object-anchors-api:
+  tracing: *tracing
+
 streaming:
   tracing: *tracing
 
