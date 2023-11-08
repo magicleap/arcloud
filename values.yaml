@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.28.37
+  version: 1.30.59
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -291,32 +291,72 @@ nats:
             - user: mapping
               password: "" # Defaults to random alpha numeric 32 character value
               permissions:
-                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+                publish: ["$JS.API.STREAM.CREATE.Events", "$JS.API.STREAM.CREATE.CloudMapUpdate", "$JS.API.STREAM.CREATE.SpaceObjectClassesUpdate",
+                          "$JS.API.STREAM.INFO.Events", "$JS.API.STREAM.INFO.CloudMapUpdate", "$JS.API.STREAM.INFO.SpaceObjectClassesUpdate",
+                          "$JS.API.STREAM.UPDATE.Events", "$JS.API.STREAM.UPDATE.CloudMapUpdate", "$JS.API.STREAM.UPDATE.SpaceObjectClassesUpdate",
+                          "health-channel.>", "Events", "CloudMapUpdate", "SpaceObjectClassesUpdate"]
+                subscribe: [ "health-channel.>", "_INBOX.>" ]
               existingSecret: ""
             - user: streaming
               password: "" # Defaults to random alpha numeric 32 character value
               permissions:
-                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+                # https://docs.nats.io/running-a-nats-service/configuration/securing_nats/authorization#permission-map
+                # "It is important to not break request-reply patterns. In these cases there is a need to add rules for the _INBOX.> pattern."
+                publish: [ "$JS.API.STREAM.NAMES",
+                           "$JS.API.STREAM.CREATE.WorkerAvailable", "$JS.API.STREAM.CREATE.SpaceWorkerPing",
+                           "$JS.API.STREAM.CREATE.DeviceConnectionStatusChange", "$JS.API.STREAM.CREATE.Events",
+                           "$JS.API.STREAM.CREATE.PosedSensorDataAvailable", "$JS.API.STREAM.CREATE.ObjectMeshAvailable",
+                           "$JS.API.STREAM.CREATE.ObjectScanningSessionContextAvailable", "$JS.API.STREAM.CREATE.StreamingSessionEvent",
+                           "$JS.API.STREAM.INFO.WorkerAvailable", "$JS.API.STREAM.INFO.SpaceWorkerPing",
+                           "$JS.API.STREAM.INFO.DeviceConnectionStatusChange", "$JS.API.STREAM.INFO.Events",
+                           "$JS.API.STREAM.INFO.PosedSensorDataAvailable", "$JS.API.STREAM.INFO.ObjectMeshAvailable",
+                           "$JS.API.STREAM.INFO.ObjectScanningSessionContextAvailable", "$JS.API.STREAM.INFO.StreamingSessionEvent",
+                           "$JS.API.STREAM.UPDATE.WorkerAvailable", "$JS.API.STREAM.UPDATE.SpaceWorkerPing",
+                           "$JS.API.STREAM.UPDATE.DeviceConnectionStatusChange", "$JS.API.STREAM.UPDATE.Events",
+                           "$JS.API.STREAM.UPDATE.PosedSensorDataAvailable", "$JS.API.STREAM.UPDATE.ObjectMeshAvailable",
+                           "$JS.API.STREAM.UPDATE.ObjectScanningSessionContextAvailable", "$JS.API.STREAM.UPDATE.StreamingSessionEvent",
+                           "$JS.API.CONSUMER.INFO.ObjectMeshAvailable.>", "$JS.API.CONSUMER.INFO.SpatialAnchorChange.>", "$JS.API.CONSUMER.INFO.CloudMapUpdate.>",
+                           "$JS.API.CONSUMER.DURABLE.CREATE.SpatialAnchorChange.>", "$JS.API.CONSUMER.DURABLE.CREATE.CloudMapUpdate.>",
+                           "$JS.API.CONSUMER.DURABLE.CREATE.ObjectMeshAvailable.>", "$JS.ACK.>",
+                           "health-channel.>", "_INBOX.>", "WorkerAvailable", "SpaceWorkerPing", "Events", "PosedSensorDataAvailable",
+                           "ObjectScanningSessionContextAvailable", "StreamingSessionEvent", "AssignDeviceToWorkerResponse",
+                           "AssignSpaceToWorkerResponse", "DeviceConnectionStatusChange"]
+                subscribe: ["health-channel.>", "_INBOX.>", "AssignDeviceToWorker.>", "AssignSpaceToWorker.>",
+                            "$JSC.CI.js.SpatialAnchorChange.>", "SpatialAnchorChange", "$JSC.CI.js.CloudMapUpdate.*", "CloudMapUpdate"]
               existingSecret: ""
             - user: spatial-anchors
               password: "" # Defaults to random alpha numeric 32 character value
               permissions:
-                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+                publish: [ "$JS.API.STREAM.CREATE.SpatialAnchorChange", "$JS.API.STREAM.CREATE.Events",
+                           "$JS.API.STREAM.INFO.SpatialAnchorChange", "$JS.API.STREAM.INFO.Events",
+                           "$JS.API.STREAM.UPDATE.SpatialAnchorChange", "$JS.API.STREAM.UPDATE.Events",
+                           "health-channel.>", "SpatialAnchorChange", "Events"]
+                subscribe: [ "health-channel.>", "_INBOX.>" ]
               existingSecret: ""
             - user: session-manager
               password: "" # Defaults to random alpha numeric 32 character value
               permissions:
-                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+                publish: [ "$JS.API.STREAM.NAMES",
+                           "$JS.API.STREAM.CREATE.SpaceWorkerPing", "$JS.API.STREAM.CREATE.Events", "$JS.API.STREAM.CREATE.WorkerAvailable",
+                           "$JS.API.STREAM.INFO.SpaceWorkerPing", "$JS.API.STREAM.INFO.Events", "$JS.API.STREAM.INFO.WorkerAvailable",
+                           "$JS.API.STREAM.UPDATE.SpaceWorkerPing", "$JS.API.STREAM.UPDATE.Events", "$JS.API.STREAM.UPDATE.WorkerAvailable",
+                           "$JS.API.CONSUMER.INFO.SpaceWorkerPing.>", "$JS.API.CONSUMER.INFO.WorkerAvailable.>",
+                           "$JS.API.CONSUMER.DURABLE.CREATE.SpaceWorkerPing.>", "$JS.API.CONSUMER.DURABLE.CREATE.WorkerAvailable.>",
+                           "$JS.ACK.>", "health-channel.>", "SpaceWorkerPing", "WorkerAvailable", "AssignSpaceToWorker.>",
+                           "AssignDeviceToWorker.>", "Events" ]
+                subscribe: [ "health-channel.>", "healthcheck.>", "_INBOX.>", "SpaceWorkerPing", "WorkerAvailable", "DeviceConnectionStatusChange",
+                             "Events" ]
               existingSecret: ""
             - user: events
               password: "" # Defaults to random alpha numeric 32 character value
               permissions:
-                publish: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
-                subscribe: ["$JS.API.STREAM.*", "$JS.API.STREAM", ">"]
+                publish: [ "$JS.API.STREAM.CREATE.Events",
+                           "$JS.API.STREAM.INFO.Events",
+                           "$JS.API.STREAM.UPDATE.Events",
+                           "$JS.API.CONSUMER.INFO.Events", "$JS.API.CONSUMER.INFO.Events.>", "$JS.API.CONSUMER.CREATE.Events.>",
+                           "$JS.ACK.>", "_INBOX.>",
+                           "health-channel.>", "healthcheck.>" ]
+                subscribe: [ "health-channel.>", "Events.>", "EventListeners.>", "_INBOX.>" ]
               existingSecret: ""
 
 postgresql:
@@ -615,7 +655,6 @@ mapping:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
-      tag: ar-spiff-cpp
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
@@ -878,7 +917,6 @@ streaming:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
-      tag: ar-spiff-cpp
   log:
     level: DEBUG
   tracing:
@@ -1052,7 +1090,7 @@ enterprise-console-web:
     port: "{{ .Values.global.mqttPort }}"
     protocol: "{{ .Values.global.mqttProtocol }}"
   arcloudBundle:
-    version: 1.28.37
+    version: 1.30.59
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"

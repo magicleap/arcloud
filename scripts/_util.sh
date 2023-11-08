@@ -58,6 +58,22 @@ check_version() {
   fi
 }
 
+check_version_range() {
+  if [ $(version $2) -ge $(version $3) ] && [ $(version $2) -le $(version $4) ]; then
+    ok "$1 v$2"
+  else
+    fatal "$1 version should be >= $3 and <= $4, but got $2. Please visit $5"
+  fi
+}
+
+check_version_exception() {
+  if [ $(version $2) -ne $(version $3) ]; then
+    ok "$1 v$2"
+  else
+    fatal "$1 version cannot be == $3. Please visit $4"
+  fi
+}
+
 repeat(){
   local start=1
   local end=${1:-80}
@@ -82,7 +98,10 @@ verify_helm() {
   local vendor_url=$4
   check_dependency $name $command
   local actual_version=$(eval helm version --template='{{.Version}}' | sed 's/v//')
-  check_version "$command" "$actual_version" "$required_version" "$vendor_url"
+  check_version "$command (client)" "$actual_version" "$required_version" "$vendor_url"
+  # Issue: Helm 3.13[.0] is not backward compatible with 3.12 (resolved in 3.13.1)
+  # https://github.com/helm/helm/issues/12460
+  check_version_exception "$command (client != 3.13.0)" "$actual_version" "3.13.0" "$vendor_url"
 }
 
 verify_istio() {
