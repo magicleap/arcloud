@@ -12,9 +12,21 @@ spec:
       env:
         PILOT_JWT_ENABLE_REMOTE_JWKS: true
         PILOT_JWT_PUB_KEY_REFRESH_INTERVAL: 10s
+    global:
+      proxy:
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - pilot-agent
+              - wait
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep", "30"]
   meshConfig:
     defaultConfig:
       holdApplicationUntilProxyStarts: true
+      terminationDrainDuration: "60s"
       proxyMetadata:
         ISTIO_META_DNS_CAPTURE: "true"
         ISTIO_META_DNS_AUTO_ALLOCATE: "true"

@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.30.59
+  version: 1.39.29
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -71,13 +71,16 @@ x-imagePullSecrets: &imagePullSecrets |
   {{ toYaml . }}
   {{- end }}
 
-x-podSecurityContext: &podSecurityContext
+x-knativePodSecurityContext: &knativePodSecurityContext
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-  fsGroupChangePolicy: OnRootMismatch
   seccompProfile:
     type: RuntimeDefault
+
+x-podSecurityContext: &podSecurityContext
+  <<: *knativePodSecurityContext
+  fsGroupChangePolicy: OnRootMismatch
 
 x-securityContext: &securityContext
   runAsNonRoot: true
@@ -141,6 +144,10 @@ x-scuttle: &scuttle
 x-kubexit: &kubexit
   image:
     repository: "{{ .Values.global.image.registry }}/kubexit"
+
+x-gosleep: &gosleep
+  image:
+    repository: "{{ .Values.global.image.registry }}/go-sleep"
 
 x-serviceAccount: &serviceAccount
   create: true
@@ -639,6 +646,14 @@ keycloak:
 mapping:
   image:
     repository: "{{ .Values.global.image.registry }}/mapping"
+  # deployment:
+  #   knativeService: true
+  #   podSecurityContext: *knativePodSecurityContext
+  #   podAnnotations:
+  #     autoscaling.knative.dev/min-scale: "1"
+  #     autoscaling.knative.dev/max-scale: "100"
+  #     autoscaling.knative.dev/target: "5"
+  #     autoscaling.knative.dev/metric: "rps"
   podSecurityContext: *podSecurityContext
   securityContext: *securityContext
   meshing:
@@ -661,6 +676,7 @@ mapping:
   annotations: *annotations
   scuttle: *scuttle
   kubexit: *kubexit
+  gosleep: *gosleep
   istio:
     <<: *istio
     virtualService:
@@ -785,7 +801,7 @@ migration:
               - table: sessions
                 privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
               - table: space_workers
-                privileges: [ "SELECT", "INSERT", "UPDATE" ]
+                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
               - table: spaces
                 privileges: [ "SELECT", "INSERT", "UPDATE" ]
           - username: space_proxy
@@ -842,6 +858,7 @@ session-manager:
   annotations: *annotations
   scuttle: *scuttle
   kubexit: *kubexit
+  gosleep: *gosleep
   istio:
     <<: *istio
     virtualService:
@@ -881,6 +898,7 @@ spatial-anchors:
   annotations: *annotations
   scuttle: *scuttle
   kubexit: *kubexit
+  gosleep: *gosleep
   istio:
     <<: *istio
     virtualService:
@@ -927,6 +945,7 @@ streaming:
     replicas: 4
   scuttle: *scuttle
   kubexit: *kubexit
+  gosleep: *gosleep
   istio:
     <<: *istio
     virtualService:
@@ -936,6 +955,8 @@ streaming:
         uriPrefix: /api/streaming/
         rewriteUri: /
         port: "{{ .Values.global.istio.gateway.ports.http }}"
+    destinationRule:
+      enabled: true
   opa: *opa
   opaIstio: *opa # TODO: Remove after common v6
   serviceAccount:
@@ -972,6 +993,7 @@ space-proxy:
   annotations: *annotations
   scuttle: *scuttle
   kubexit: *kubexit
+  gosleep: *gosleep
   istio:
     <<: *istio
     virtualService:
@@ -985,8 +1007,6 @@ space-proxy:
   serviceAccount:
     create: true
   localRateLimit: *localRateLimit
-  proxy:
-    targetPort: 52000
   postgresql:
     host: "{{ .Values.global.postgresql.host }}"
     port: "{{ .Values.global.postgresql.port }}"
@@ -1004,6 +1024,7 @@ events:
   annotations: *annotations
   scuttle: *scuttle
   kubexit: *kubexit
+  gosleep: *gosleep
   istio:
     <<: *istio
     virtualService:
@@ -1090,7 +1111,7 @@ enterprise-console-web:
     port: "{{ .Values.global.mqttPort }}"
     protocol: "{{ .Values.global.mqttProtocol }}"
   arcloudBundle:
-    version: 1.30.59
+    version: 1.39.29
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"
