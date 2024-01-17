@@ -14,15 +14,15 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 1.24.1
+version: 1.25.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 1.24.1
+appVersion: 1.25.0
 
 dependencies:
   - name: keycloak
-    version: 1.24.1
+    version: 1.25.0
     repository: https://registry.magicleap.io/chartrepo/enterprise/
     # version: 0.0.0
     # repository: file://../../../keycloak/helm

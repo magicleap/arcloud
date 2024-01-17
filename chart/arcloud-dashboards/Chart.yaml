@@ -14,15 +14,15 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.14.4
+version: 0.14.5
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 0.14.4
+appVersion: 0.14.5
 
 dependencies:
   - name: arcloud-dashboards
-    version: 0.14.4
+    version: 0.14.5
     repository: https://registry.magicleap.io/chartrepo/enterprise/
     # repository: file://../../../../../cs/arcloud-dashboards/helm
     condition: arcloud-dashboards.enabled

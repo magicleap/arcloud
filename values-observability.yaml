@@ -2,30 +2,6 @@
 ####################### AR CLOUD #######################
 ########################################################
 
-#############
-# TEMPLATES #
-#############
-
-x-tracing: &tracing
-  enabled: true
-  endpoint: "opentelemetry-collector:4317"
-  insecure: true
-
-############
-# BACKENDS #
-############
-
-device-gateway:
-  extraEnv: |
-    - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "http://opentelemetry-collector:4318"
-
-mapping:
-  tracing: *tracing
-
-streaming:
-  tracing: *tracing
-
 #################
 # OBSERVABILITY #
 #################
@@ -173,52 +149,8 @@ loki:
       retention_period: 1416h
 
 opentelemetry-collector:
-  mode: deployment
-  clusterRole:
-    create: false
-  containerLogs:
-    enabled: true
-  ports:
-    prometheus:
-      enabled: true
-      containerPort: 19100
-      servicePort: 19100
-      hostPort: 19100
-      protocol: TCP
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 1
-      memory: 2Gi
   config:
-    receivers:
-      otlp:
-        protocols:
-          grpc:
-          http:
-      # Settings to scrape metrics directly from a Prometheus database and push it to
-      # the collector for further processing. This can be useful if you want to fanout metrics
-      # data to other systems (eg. datadog).
-      # prometheus:
-      #   config:
-      #     scrape_configs:
-      #       - job_name: 'otel-collector'
-      #         scrape_interval: 10s
-      #         static_configs:
-      #           - targets: ['prometheus-server']
-    processors:
-      batch:
-        send_batch_size: 50
-        timeout: 5s
-      memory_limiter:
-        check_interval: 2s
-        limit_mib: 500
-        spike_limit_mib: 100
     exporters:
-      logging:
-        logLevel: error
       otlp/tempo:
         endpoint: "tempo:4317"
         tls:
@@ -229,47 +161,12 @@ opentelemetry-collector:
           queue_size: 100
         retry_on_failure:
           enabled: true
-      # Settings for creating a Prometheus endpoint which other system can scrape metrics.
-      # This can be useful if you have metrics coming from multiple sources (e.g. statsd, otel)
-      # and you want to convert all to Prometheus time-series.
-      # prometheus:
-      #   endpoint: "0.0.0.0:19090"
-      #   namespace: "arcloud"
-      #   send_timestamps: true
-      #   metric_expiration: 10m
-      #   resource_to_telemetry_conversion:
-      #     enabled: true
-    extensions:
-      pprof: {}
-      zpages: {}
-      health_check: {}
-      memory_ballast:
-        size_mib: 512
     service:
-      extensions:
-      - pprof
-      - zpages
-      - health_check
       pipelines:
         traces:
-          receivers:
-          - otlp
-          processors:
-          - memory_limiter
-          - batch
           exporters:
-          - otlp/tempo
-          - logging
-        # Settings to scrape metrics from Prometheus and in order to ship them upstream.
-        # metrics:
-        #   receivers:
-        #   - prometheus
-        #   processors:
-        #   - memory_limiter
-        #   - batch
-        #   exporters:
-        #   - logging
-        #   - prometheus
+            - debug
+            - otlp/tempo
 
 promtail:
   updateStrategy:

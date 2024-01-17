@@ -539,7 +539,7 @@ parse_args() {
 
   HELM_PARAMS="-f $HOME_DIR/values.yaml"
   if $OBSERVABILITY; then
-    HELM_PARAMS="$HELM_PARAMS -f $HOME_DIR/values-observability.yaml"
+    HELM_PARAMS="$HELM_PARAMS -f $HOME_DIR/values-observability-collector.yaml -f $HOME_DIR/values-observability.yaml"
   fi
   if $USE_GPUS; then
     HELM_PARAMS="$HELM_PARAMS -f $HOME_DIR/values-gpus.yaml"

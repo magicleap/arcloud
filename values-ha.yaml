@@ -221,17 +221,17 @@ streaming:
         cpu: 2
         memory: 4Gi
       # limits:
-      #   cpu: 4
-      #   memory: 8Gi
+      #   cpu: 2
+      #   memory: 4Gi
   statefulset:
     replicas: 4
     resources:
       requests:
-        cpu: 1
+        cpu: 0.5
         memory: 1Gi
-      # limits:
-      #   cpu: 2
-      #   memory: 2Gi
+      limits:
+        cpu: 1
+        memory: 2Gi
 
 space-proxy:
   deployment:
