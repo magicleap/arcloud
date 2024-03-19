@@ -1,6 +1,6 @@
 dependencies:
 - name: device-gateway
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 2.35.1
-digest: sha256:eee4812524f83323f6d237f8e56d343bd68f3d041b3d6248c577743df5f7cf1d
-generated: "2023-06-08T20:13:15.64130485Z"
+  version: 2.35.3
+digest: sha256:1ff65aff87ab730e61be1ae0d2bad3f986ca17a7c4ad395aba1c564536513987
+generated: "2024-02-23T12:29:22.487803054Z"

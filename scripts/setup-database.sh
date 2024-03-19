@@ -107,15 +107,23 @@ EOSQL
 function create_user() {
   local user=$1
   local password=$2
+  shift 2
+  local attributes=("$@")
 
   # check if user already exists
   if ! [ "$( psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$user'" )" = '1' ]; then
     echo " Creating user '$user'"
     psql <<-EOSQL
-      CREATE USER $user WITH PASSWORD '$password';
+      CREATE USER $user WITH PASSWORD '$password' ${attributes[@]};
 EOSQL
   else
     echo " user '$user' already exists"
+    if [ ${#attributes[@]} -gt 0 ]; then
+      echo " setting attributes '${attributes[@]}' on user '$user'"
+      psql <<-EOSQL
+        ATER USER $user ${attributes[@]};
+EOSQL
+    fi
   fi
 }
 
@@ -227,7 +235,7 @@ create_postgis_extension "arcloud"
 create_user "${ARCLOUD_MAPPING_USER}" "${ARCLOUD_MAPPING_PASSWORD}"
 grant_connect_role "${ARCLOUD_MAPPING_USER}" "arcloud"
 #
-create_user "${ARCLOUD_MIGRATION_USER}" "${ARCLOUD_MIGRATION_PASSWORD}"
+create_user "${ARCLOUD_MIGRATION_USER}" "${ARCLOUD_MIGRATION_PASSWORD}" CREATEDB
 grant_admin_role "${ARCLOUD_MIGRATION_USER}" "${ARCLOUD_MIGRATION_PASSWORD}" "arcloud"
 #
 create_user "${ARCLOUD_SESSION_MANAGER_USER}" "${ARCLOUD_SESSION_MANAGER_PASSWORD}"
