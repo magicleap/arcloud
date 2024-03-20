@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.39.29
+  version: 1.45.52
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -65,6 +65,10 @@ x-annotations: &annotations |
   {{- with .Values.global.annotations }}
   {{ toYaml . }}
   {{- end }}
+
+x-corsPolicy: &corsPolicy
+  allowOrigins:
+  - exact: '{{ .Values.global.minio.endpoint }}'
 
 x-imagePullSecrets: &imagePullSecrets |
   {{- with .Values.global.imagePullSecrets }}
@@ -153,6 +157,9 @@ x-serviceAccount: &serviceAccount
   create: true
 
 x-localRateLimit: &localRateLimit
+  enabled: false
+
+x-agones: &agones
   enabled: false
 
 ############
@@ -329,7 +336,8 @@ nats:
                            "ObjectScanningSessionContextAvailable", "StreamingSessionEvent", "AssignDeviceToWorkerResponse",
                            "AssignSpaceToWorkerResponse", "DeviceConnectionStatusChange"]
                 subscribe: ["health-channel.>", "_INBOX.>", "AssignDeviceToWorker.>", "AssignSpaceToWorker.>",
-                            "$JSC.CI.js.SpatialAnchorChange.>", "SpatialAnchorChange", "$JSC.CI.js.CloudMapUpdate.*", "CloudMapUpdate"]
+                            "$JSC.CI.js.SpatialAnchorChange.>", "SpatialAnchorChange", "$JSC.CI.js.CloudMapUpdate.*",
+                            "CloudMapUpdate", "GetWorkerState.>", "ShutdownWorker.>"]
               existingSecret: ""
             - user: spatial-anchors
               password: "" # Defaults to random alpha numeric 32 character value
@@ -350,7 +358,7 @@ nats:
                            "$JS.API.CONSUMER.INFO.SpaceWorkerPing.>", "$JS.API.CONSUMER.INFO.WorkerAvailable.>",
                            "$JS.API.CONSUMER.DURABLE.CREATE.SpaceWorkerPing.>", "$JS.API.CONSUMER.DURABLE.CREATE.WorkerAvailable.>",
                            "$JS.ACK.>", "health-channel.>", "SpaceWorkerPing", "WorkerAvailable", "AssignSpaceToWorker.>",
-                           "AssignDeviceToWorker.>", "Events" ]
+                           "AssignDeviceToWorker.>", "Events", "GetWorkerState.>", "ShutdownWorker.>" ]
                 subscribe: [ "health-channel.>", "healthcheck.>", "_INBOX.>", "SpaceWorkerPing", "WorkerAvailable", "DeviceConnectionStatusChange",
                              "Events" ]
               existingSecret: ""
@@ -397,7 +405,7 @@ postgresql:
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
     database: arcloud
-    role: admin
+    role: dbcreator
   - username: session_manager
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
@@ -670,6 +678,7 @@ mapping:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
+      tag: v2.1.3
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
@@ -686,6 +695,7 @@ mapping:
         uriPrefix: /ARCloud.Mapping/
         port: "{{ .Values.global.istio.gateway.ports.http }}"
       http:
+        corsPolicy: *corsPolicy
         uriPrefix: /api/mapping/
         rewriteUri: /
         port: "{{ .Values.global.istio.gateway.ports.http }}"
@@ -729,123 +739,160 @@ migration:
   postgresql:
     host: "{{ .Values.global.postgresql.host }}"
     port: "{{ .Values.global.postgresql.port }}"
-    database: arcloud
     existingSecret: postgresql-migration
+  spatialServicesDB:
+    existingSecret: postgresql-migration
+  migrations:
+    registerDefaultTenantDB: true
   sqlAccess:
-    permittedPrivileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-    databaseGrants:
-      - database: arcloud
-        grants:
-          - username: arcloud_dashboards
-            scopes:
-              - table: cloud_maps
-                privileges: [ "SELECT" ]
-              - table: device_states
-                privileges: [ "SELECT" ]
-              - table: mapping_jobs
-                privileges: [ "SELECT" ]
-              - table: persistent_pose_mappings
-                privileges: [ "SELECT" ]
-              - table: persistent_poses
-                privileges: [ "SELECT" ]
-              - table: posed_sensor_data
-                privileges: [ "SELECT" ]
-              - table: sessions
-                privileges: [ "SELECT" ]
-              - table: space_workers
-                privileges: [ "SELECT" ]
-              - table: spaces
-                privileges: [ "SELECT" ]
-              - table: spatial_anchors
-                privileges: [ "SELECT" ]
-              - table: tracking_maps
-                privileges: [ "SELECT" ]
-          - username: events
-            scopes:
-              - table: events
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-          - username: mapping
-            scopes:
-              - table: cloud_maps
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: mapping_jobs
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: persistent_pose_mappings
-                privileges: [ "SELECT", "DELETE" ]
-              - table: persistent_poses
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: posed_sensor_data
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: sessions
-                privileges: [ "SELECT", "DELETE" ]
-              - table: space_locks
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: space_workers
-                privileges: [ "SELECT", "INSERT", "UPDATE" ]
-              - table: spaces
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: spatial_anchors
-                privileges: [ "SELECT", "DELETE" ]
-              - table: tracking_maps
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: space_object_classes
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: object_classes
-                privileges: [ "SELECT", "UPDATE" ]
-              - table: support_data
-                privileges: [ "SELECT" ]
-          - username: session_manager
-            scopes:
-              - table: device_states
-                privileges: [ "SELECT", "INSERT", "UPDATE" ]
-              - table: sessions
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: space_workers
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: spaces
-                privileges: [ "SELECT", "INSERT", "UPDATE" ]
-          - username: space_proxy
-            scopes:
-              - table: sessions
-                privileges: [ "SELECT" ]
-              - table: space_workers
-                privileges: [ "SELECT" ]
-          - username: spatial_anchors
-            scopes:
-              - table: cloud_maps
-                privileges: [ "SELECT" ]
-              - table: persistent_pose_mappings
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: persistent_poses
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: posed_sensor_data
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: spaces
-                privileges: [ "SELECT" ]
-              - table: spatial_anchors
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-          - username: streaming
-            scopes:
-              - table: cloud_maps
-                privileges: [ "SELECT" ]
-              - table: device_states
-                privileges: [ "SELECT", "INSERT", "UPDATE" ]
-              - table: persistent_pose_mappings
-                privileges: [ "SELECT" ]
-              - table: posed_sensor_data
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
-              - table: sessions
-                privileges: [ "SELECT" ]
-              - table: spaces
-                privileges: [ "SELECT" ]
-              - table: spatial_anchors
-                privileges: [ "SELECT" ]
-              - table: support_data
-                privileges: [ "SELECT", "INSERT", "UPDATE" ]
-          - username: meshing
-            scopes:
-              - table: posed_sensor_data
-                privileges: [ "SELECT", "INSERT", "UPDATE", "DELETE" ]
+    spatialServicesDB:
+      permittedPrivileges: ["SELECT"]
+      grants:
+        - username: arcloud_dashboards
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: events
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: mapping
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: session_manager
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: space_proxy
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: spatial_anchors
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: streaming
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+        - username: meshing
+          scopes:
+            - table: tenant_metadata
+              privileges: ["SELECT"]
+    defaultTenantDB:
+      permittedPrivileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+      grants:
+        - username: arcloud_dashboards
+          scopes:
+            - table: cloud_maps
+              privileges: ["SELECT"]
+            - table: device_states
+              privileges: ["SELECT"]
+            - table: mapping_jobs
+              privileges: ["SELECT"]
+            - table: persistent_pose_mappings
+              privileges: ["SELECT"]
+            - table: persistent_poses
+              privileges: ["SELECT"]
+            - table: posed_sensor_data
+              privileges: ["SELECT"]
+            - table: sessions
+              privileges: ["SELECT"]
+            - table: space_workers
+              privileges: ["SELECT"]
+            - table: spaces
+              privileges: ["SELECT"]
+            - table: spatial_anchors
+              privileges: ["SELECT"]
+            - table: tracking_maps
+              privileges: ["SELECT"]
+        - username: events
+          scopes:
+            - table: events
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+        - username: mapping
+          scopes:
+            - table: cloud_maps
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: mapping_jobs
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: persistent_pose_mappings
+              privileges: ["SELECT", "DELETE"]
+            - table: persistent_poses
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: posed_sensor_data
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: sessions
+              privileges: ["SELECT", "DELETE"]
+            - table: space_locks
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: space_workers
+              privileges: ["SELECT", "INSERT", "UPDATE"]
+            - table: spaces
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: spatial_anchors
+              privileges: ["SELECT", "DELETE"]
+            - table: tracking_maps
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: space_object_classes
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: object_classes
+              privileges: ["SELECT", "UPDATE"]
+            - table: support_data
+              privileges: ["SELECT"]
+        - username: session_manager
+          scopes:
+            - table: device_states
+              privileges: ["SELECT", "INSERT", "UPDATE"]
+            - table: sessions
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: space_workers
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: spaces
+              privileges: ["SELECT", "INSERT", "UPDATE"]
+        - username: space_proxy
+          scopes:
+            - table: sessions
+              privileges: ["SELECT"]
+            - table: space_workers
+              privileges: ["SELECT"]
+        - username: spatial_anchors
+          scopes:
+            - table: cloud_maps
+              privileges: ["SELECT"]
+            - table: persistent_pose_mappings
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: persistent_poses
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: posed_sensor_data
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: spaces
+              privileges: ["SELECT"]
+            - table: spatial_anchors
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+        - username: streaming
+          scopes:
+            - table: cloud_maps
+              privileges: ["SELECT"]
+            - table: device_states
+              privileges: ["SELECT", "INSERT", "UPDATE"]
+            - table: persistent_pose_mappings
+              privileges: ["SELECT"]
+            - table: posed_sensor_data
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+            - table: sessions
+              privileges: ["SELECT"]
+            - table: spaces
+              privileges: ["SELECT"]
+            - table: spatial_anchors
+              privileges: ["SELECT"]
+            - table: support_data
+              privileges: ["SELECT", "INSERT", "UPDATE"]
+        - username: meshing
+          scopes:
+            - table: posed_sensor_data
+              privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
 
 session-manager:
   image:
@@ -886,6 +933,7 @@ session-manager:
     port: "{{ .Values.global.nats.port }}"
     clusterId: "{{ $.Values.global.nats.clusterID }}"
     existingSecret: nats-js-session-manager
+  agones: *agones
 
 spatial-anchors:
   image:
@@ -935,6 +983,7 @@ streaming:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
+      tag: v2.1.3
   log:
     level: DEBUG
   tracing:
@@ -983,6 +1032,7 @@ streaming:
   server:
     streamscheck:
       tickerDurationSec: 300
+  agones: *agones
 
 space-proxy:
   image:
@@ -1081,6 +1131,8 @@ enterprise-console-web:
     {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
     {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
     {{- printf "%s://%s%s%s/api" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+  navigation:
+    usersRoute: /auth
   keycloak:
     clientId: com.magicleap.web.enterpriseportal
     domain: |-
@@ -1110,8 +1162,23 @@ enterprise-console-web:
   mqtt:
     port: "{{ .Values.global.mqttPort }}"
     protocol: "{{ .Values.global.mqttProtocol }}"
+  qrCode:
+    hostUrl: |-
+      {{- $mqttPort := printf "%s" (.Values.global.mqttPort | toString) -}}
+      {{- printf "%s://%s%s:%s" .Values.global.mqttProtocol .Values.global.domainPrefix .Values.global.domain $mqttPort -}}
+    platformUrl: |-
+      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+      {{- printf "%s://%s%s%s/" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
+    platformPath: /api/platform-config/v1/config
+    oidcDiscoveryUrl: |-
+      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
+      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
+      {{- printf "%s://%s%s%s/auth/realms/magicleap/.well-known/openid-configuration" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
   arcloudBundle:
-    version: 1.39.29
+    version: 1.45.52
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"

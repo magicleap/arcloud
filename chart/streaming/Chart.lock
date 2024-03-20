@@ -1,6 +1,6 @@
 dependencies:
 - name: streaming
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.57.9
-digest: sha256:2128c63c0cc3e96dec68e17396e31fda67abc266844994d05aa8bf59c9f52cbe
-generated: "2023-12-21T15:38:48.971710038Z"
+  version: 0.62.3
+digest: sha256:6d4295fe338b6c1f0ade7d49caeb8939881c4dca281395568eae95a38cc42d0d
+generated: "2024-02-23T14:13:13.384994337Z"

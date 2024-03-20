@@ -11,12 +11,16 @@ readonly SCRIPTS_DIR="$( cd "$( dirname "$0" )/scripts" >/dev/null && pwd )"
 #
 # GLOBAL VARS
 #
+readonly KNATIVE_SERVING_VERSION=1.11.3
+readonly KNATIVE_NET_ISTIO_VERSION=1.11.3
+readonly AGONES_CHART_VERSION=1.35.0
+readonly ARGO_CHART_VERSION=0.37.0
 readonly VERSION="0.0.0"
 readonly SCRIPT_NAME=${0##*/}
 readonly CHART_DIR=$HOME_DIR/chart
 readonly HELM_DEP=("Helm" "helm" "3.2.0" "https://github.com/helm/helm/")
-readonly KUBECTL_DEP=("Kubectl" "kubectl" "1.20.0" "https://github.com/kubernetes/kubectl/")
-readonly ISTIO_DEP=("Istio" "istio" "1.14.1" "https://github.com/istio/istio/")
+readonly KUBECTL_DEP=("Kubectl" "kubectl" "1.26.8" "https://github.com/kubernetes/kubectl/")
+readonly ISTIO_DEP=("Istio" "istio" "1.18.5" "https://istio.io/latest/docs/setup/install/istioctl/")
 readonly SERVICE_CHARTS=(
   "postgresql"
   "minio"
@@ -42,6 +46,9 @@ readonly PRIORITY_CHARTS=(
 #
 # DEFAULT VARS
 #
+ALPHA_ENABLED=${ALPHA_ENABLED:=false}
+PROMPT_FOR_THIRD_PARTY_INSTALLS=${PROMPT_FOR_THIRD_PARTY_INSTALLS:=true}
+AUTO_THIRD_PARTY_INSTALLS=${AUTO_THIRD_PARTY_INSTALLS:=false}
 ACCEPT_SLA="${ACCEPT_SLA:=}"
 DRY_RUN=${DRY_RUN:=false}
 MINIMAL=${MINIMAL:=false}
@@ -74,22 +81,206 @@ HELM_PARAMS=
 # SCRIPT-SPECIFIC FUNCTIONS
 #
 check_cluster_resources() {
-  header "Checking cluster dependencies"
   if [ "$(kubectl get ns istio-system -o jsonpath='{.status.phase}' 2>/dev/null)"  != "Active" ] ; then
     fatal "'istio-system' namespace not found."
   fi
+
   if [ "$(kubectl get ns $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null)" != "Active" ] ; then
     fatal "'$NAMESPACE' namespace not found."
   fi
+
   if [ "$(kubectl get namespace $NAMESPACE -o jsonpath='{.metadata.labels.istio-injection}')" != "enabled" ]; then
     fatal "'$NAMESPACE' namespace requires 'istio-injection=enabled' label."
   fi
+
   ok "namespaces"
 
   if [ "$(kubectl get secret $REGISTRY_SECRET -n $NAMESPACE -o jsonpath='{.metadata.name}' 2>/dev/null)" != $REGISTRY_SECRET ] ; then
     fatal "Could not find '$REGISTRY_SECRET' secret in '$NAMESPACE' namespace."
   fi
+
   ok "secrets"
+}
+
+install_agones() {
+  kubectl create namespace agones-system || true
+  kubectl label namespace agones-system istio-injection=enabled --overwrite
+
+  helm upgrade agones agones/agones --install \
+    --set "agones.ping.install=false" \
+    --set "agones.allocator.install=false" \
+    --set "agones.controller.replicas=1" \
+    --set "agones.extensions.replicas=1" \
+    --namespace agones-system \
+    --version $AGONES_CHART_VERSION
+
+  kubectl --namespace agones-system rollout status --watch --timeout=600s deployment agones-controller 
+  kubectl --namespace agones-system rollout status --watch --timeout=600s deployment agones-extensions 
+}
+
+install_argo_workflows() {
+  kubectl create namespace argo-system || true
+  kubectl label namespace argo-system istio-injection=enabled --overwrite
+
+  helm upgrade --install argo argo/argo-workflows \
+      --namespace argo-system \
+      --version $ARGO_CHART_VERSION \
+      --set 'singleNamespace=false' \
+      --set 'server.extraArgs={--auth-mode=server}' \
+      --set 'server.logging.format=json' \
+      --set 'controller.parallelism=10'
+
+  kubectl --namespace argo-system rollout status --watch --timeout=600s deployment argo-argo-workflows-workflow-controller 
+  kubectl --namespace argo-system rollout status --watch --timeout=600s deployment argo-argo-workflows-server  
+}
+
+install_istio() {
+  kubectl create namespace istio-system || true
+
+  istioctl install -y -f $HOME_DIR/setup/istio.yaml
+
+  helm upgrade istio-gateway enterprise/istio-gateway --wait --create-namespace --install --namespace istio-system -f $HOME_DIR/setup/gateway.yaml
+
+  kubectl --namespace istio-system apply -f $HOME_DIR/setup/ingress-gateway-socket-options.yaml
+  kubectl --namespace istio-system rollout restart deployment istio-ingressgateway
+  kubectl --namespace istio-system rollout status --watch --timeout=600s deployment istio-ingressgateway
+}
+
+install_knative() {
+  kubectl create namespace knative-serving || true
+  kubectl label namespace knative-serving istio-injection=enabled
+
+  kubectl apply -f "https://github.com/knative/serving/releases/download/knative-v${KNATIVE_SERVING_VERSION}/serving-crds.yaml"
+  kubectl apply -f "https://github.com/knative/serving/releases/download/knative-v${KNATIVE_SERVING_VERSION}/serving-core.yaml"
+
+  kubectl apply -f "https://github.com/knative/net-istio/releases/download/knative-v${KNATIVE_NET_ISTIO_VERSION}/net-istio.yaml"
+
+  kubectl patch configmap/config-features \
+        --namespace knative-serving \
+        --type merge \
+        --patch '{"data":{"kubernetes.podspec-init-containers":"enabled"}}'
+
+  kubectl patch configmap/config-features \
+        --namespace knative-serving \
+        --type merge \
+        --patch '{"data":{"kubernetes.podspec-securitycontext":"enabled"}}'
+
+  kubectl patch configmap/config-features \
+        --namespace knative-serving \
+        --type merge \
+        --patch '{"data":{"kubernetes.podspec-fieldref":"enabled"}}'
+
+  kubectl patch configmap/config-gc \
+        --namespace knative-serving \
+        --type merge \
+        --patch '{"data":{"min-non-active-revisions":"0","max-non-active-revisions":"0","retain-since-create-time":"disabled","retain-since-last-active-time":"disabled"}}'
+
+  kubectl --namespace knative-serving rollout status --watch --timeout=600s deployment activator 
+  kubectl --namespace knative-serving rollout status --watch --timeout=600s deployment autoscaler 
+  kubectl --namespace knative-serving rollout status --watch --timeout=600s deployment controller 
+  kubectl --namespace knative-serving rollout status --watch --timeout=600s deployment webhook 
+  kubectl --namespace knative-serving rollout status --watch --timeout=600s deployment net-istio-controller 
+  kubectl --namespace knative-serving rollout status --watch --timeout=600s deployment net-istio-webhook 
+}
+
+check_istio_installation() {
+  if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    fatal "syntax: check_istio_installation <auto-install> <prompt-for-install> [recursion-depth]"
+  fi
+
+  local -r n_deployments=2
+  local -r more_info="For more information, visit: istio.io/latest/docs/setup/install/"
+  local recursion_depth=${3:-0}
+
+  if ! check_deployments istio-system $n_deployments; then
+    warn "Istio doesn't seem to be installed"
+
+    if [ "$recursion_depth" -lt 2 ]; then
+      install_dependency $1 $2 install_istio "$more_info"
+      check_istio_installation $1 $2 $((recursion_depth + 1))
+    else
+      fatal "Reached maximum attempt to verify Istio installation."
+    fi
+
+    return
+  fi
+
+  ok "istio"
+}
+
+check_agones_installation() {
+  if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    fatal "syntax: check_agones_installation <auto-install> <prompt-for-install> [recursion-depth]"
+  fi
+
+  local -r n_deployments=2
+  local -r more_info="For more information, visit: agones.dev/site/docs/installation/"
+  local recursion_depth=${3:-0}
+
+  if ! check_deployments agones-system $n_deployments; then
+    warn "Agones could not be verified."
+
+    if [ "$recursion_depth" -lt 2 ]; then
+      install_dependency $1 $2 install_agones "$more_info"
+      check_agones_installation $1 $2 $((recursion_depth + 1))
+    else
+      fatal "Reached maximum attempt to verify Agones installation."
+    fi
+
+    return
+  fi
+
+  ok "agones"
+}
+
+check_argo_installation() {
+  if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    fatal "syntax: check_argo_installation <auto-install> <prompt-for-install> [recursion-depth]"
+  fi
+
+  local -r n_deployments=2
+  local -r more_info="For more details, visit github.com/argoproj/argo-helm/tree/main/charts/argo-workflows"
+  local recursion_depth=${3:-0}
+
+  if ! check_deployments argo-system $n_deployments; then
+    warn "Argo-Workflows could not be verified."
+
+    if [ "$recursion_depth" -lt 2 ]; then
+      install_dependency $1 $2 install_argo_workflows "$more_info"
+      check_argo_installation $1 $2 $((recursion_depth + 1))
+    else
+      fatal "Reached maximum attempts to verify Argo-Workflows installation."
+    fi
+
+    return
+  fi
+
+  ok "argo-workflows"
+}
+
+check_knative_installation() {
+  if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    fatal "syntax: check_knative_installation <auto-install> <prompt-for-install> [recursion-depth]"
+  fi
+
+  local -r n_deployments=6
+  local -r more_info="For more details, visit knative.dev/docs/install/"
+  local recursion_depth=${3:-0}
+
+  if ! check_deployments knative-serving $n_deployments; then
+    warn "Knative could not be verified."
+
+    if [ "$recursion_depth" -lt 2 ]; then
+      install_dependency $1 $2 install_knative "$more_info"
+      check_knative_installation $1 $2 $((recursion_depth + 1))
+    else
+      fatal "Reached maximum attempts to verify Knative installation."
+    fi
+
+    return
+  fi
+
+  ok "knative"
 }
 
 print_installation_info() {
@@ -354,6 +545,8 @@ install_chart() {
     silent helm dep update --skip-refresh "$CHART_DIR/$chart"
   fi
 
+  info "Installing chart ${chart}..."
+
   # shellcheck disable=SC2086
   silent helm upgrade --timeout 10m --install --atomic --wait \
     --namespace "$NAMESPACE" \
@@ -410,11 +603,14 @@ FLAGS:
   -h|--help               Print this message
   --minimal               Minimal installation
   --no-check-dependencies Disable check of local and remote pre-requisites before running installations
+  --auto-install          Install cluster third-party dependencies automatically
+  --no-prompt             Disable prompt before any third-party dependency installation
   --no-observability      Disable observability charts installation
   --no-parallel           Disable parallel chart installation
   --no-secure             Use insecure http and mqtt installation options
   --update-docker         Update the docker image (and roll the pods)
   --update-helm           Update helm chart
+  --alpha                 Enable features still in alpha
   -v|--verbose            Verbose output (debug traces)
 EOF
 }
@@ -475,6 +671,14 @@ parse_args() {
         SECURE=false
         shift
         ;;
+      --auto-install )
+        AUTO_THIRD_PARTY_INSTALLS=true
+        shift
+        ;;
+      --no-prompt )
+        PROMPT_FOR_THIRD_PARTY_INSTALLS=false
+        shift
+        ;;
       --installation-info )
         PRINT_INSTALLATION_INFO=true
         shift
@@ -497,6 +701,10 @@ parse_args() {
         ;;
       --no-check-dependencies )
         CHECK_DEPENDENCIES=false
+        shift
+        ;;
+      --alpha )
+        ALPHA_ENABLED=true
         shift
         ;;
       --values )
@@ -576,6 +784,9 @@ parse_args() {
   readonly UPDATE_DOCKER
   readonly UPDATE_HELM
   readonly HELM_PARAMS
+  readonly AUTO_THIRD_PARTY_INSTALLS
+  readonly PROMPT_FOR_THIRD_PARTY_INSTALLS
+  readonly ALPHA_ENABLED
 
   if $VERBOSE; then
     debug "VERSION: $VERSION"
@@ -601,6 +812,9 @@ parse_args() {
     debug "SECURE: $SECURE"
     debug "UPDATE_DOCKER: $UPDATE_DOCKER"
     debug "UPDATE_HELM: $UPDATE_HELM"
+    debug "AUTO_THIRD_PARTY_INSTALLS: $AUTO_THIRD_PARTY_INSTALLS"
+    debug "PROMPT_FOR_THIRD_PARTY_INSTALLS: $PROMPT_FOR_THIRD_PARTY_INSTALLS"
+    debug "ALPHA_ENABLED: $ALPHA_ENABLED"
   fi
 
   if [ "$ACCEPT_SLA" != "true" ] && [ "$ACCEPT_SLA" != "yes" ] && [ "$ACCEPT_SLA" != "y" ] && [ "$ACCEPT_SLA" != "1" ]; then
@@ -615,10 +829,18 @@ parse_args() {
 #
 parse_args "$@"
 
-assert_commands_exist helm kubectl
+if ! assert_command_exist kubectl "To install: https://kubernetes.io/docs/tasks/tools/#kubectl"; then
+  exit 1
+fi
+
+if ! assert_command_exist helm "To install: https://helm.sh/docs/intro/install"; then
+  exit 1
+fi
 
 if $UPDATE_DOCKER; then
-  assert_commands_exist docker
+  if ! assert_command_exist docker "To install: https://docs.docker.com/get-docker"; then
+    exit 1
+  fi
 fi
 
 if $PRINT_INSTALLATION_INFO; then
@@ -627,10 +849,23 @@ if $PRINT_INSTALLATION_INFO; then
 fi
 
 if $CHECK_DEPENDENCIES; then
-  header "Checking versioned dependencies"
+  header "Checking local dependencies"
   verify_helm ${HELM_DEP[@]}
   verify_kubectl ${KUBECTL_DEP[@]}
-  verify_istio ${ISTIO_DEP[@]}
+
+  if ! $ALPHA_ENABLED; then
+    verify_istio ${ISTIO_DEP[@]}
+  fi
+
+  if $ALPHA_ENABLED; then
+    header "Checking cluster dependencies"
+    check_istio_installation "$AUTO_THIRD_PARTY_INSTALLS" "$PROMPT_FOR_THIRD_PARTY_INSTALLS"
+    check_agones_installation "$AUTO_THIRD_PARTY_INSTALLS" "$PROMPT_FOR_THIRD_PARTY_INSTALLS"
+    check_argo_installation "$AUTO_THIRD_PARTY_INSTALLS" "$PROMPT_FOR_THIRD_PARTY_INSTALLS"
+    check_knative_installation "$AUTO_THIRD_PARTY_INSTALLS" "$PROMPT_FOR_THIRD_PARTY_INSTALLS"
+  fi
+
+  header "Checking cluster resources"
   check_cluster_resources
 fi
 

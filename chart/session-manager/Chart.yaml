@@ -14,16 +14,16 @@ type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.36.2
+version: 0.41.4
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: 0.36.2
+appVersion: 0.41.4
 
 dependencies:
   - name: session-manager
-    version: 0.36.2
+    version: 0.41.4
     repository: https://registry.magicleap.io/chartrepo/connected-services/
     # version: 0.0.0
-    # repository: file://../../../../cs/session-manager/helm
+    # repository: file://../../../../../cs/session-manager/helm
     condition: session-manager.enabled
