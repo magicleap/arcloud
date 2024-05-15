@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.45.52
+  version: 1.48.21
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -55,7 +55,7 @@ global:
     mapMerge: true
     spaceMeshing: false
     peopleExclusion: false
-    meshPreview: false
+    meshingOptions: false
 
 #############
 # TEMPLATES #
@@ -275,11 +275,6 @@ minio:
       existingSecret: ""
       policy: consoleAdmin
       purge: true
-    - accesskey: arcloud-dashboards
-      secretkey: "" # When unset defaults to a random alpha numeric 32 character value
-      existingSecret: ""
-      policy: readwrite
-      purge: false
 
 nats:
   nats:
@@ -391,11 +386,6 @@ postgresql:
     size: 10Gi
   users:
   # arcloud
-  - username: arcloud_dashboards
-    password: "" # When unset defaults to a random alpha numeric 32 character value
-    existingSecret: ""
-    database: arcloud
-    role: connect # Granting SQL privileges is managed by migration
   - username: mapping
     password: "" # When unset defaults to a random alpha numeric 32 character value
     existingSecret: ""
@@ -678,7 +668,7 @@ mapping:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
-      tag: v2.1.3
+      tag: v2.2.2
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
@@ -740,73 +730,12 @@ migration:
     host: "{{ .Values.global.postgresql.host }}"
     port: "{{ .Values.global.postgresql.port }}"
     existingSecret: postgresql-migration
-  spatialServicesDB:
-    existingSecret: postgresql-migration
   migrations:
     registerDefaultTenantDB: true
   sqlAccess:
-    spatialServicesDB:
-      permittedPrivileges: ["SELECT"]
-      grants:
-        - username: arcloud_dashboards
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: events
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: mapping
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: session_manager
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: space_proxy
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: spatial_anchors
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: streaming
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
-        - username: meshing
-          scopes:
-            - table: tenant_metadata
-              privileges: ["SELECT"]
     defaultTenantDB:
       permittedPrivileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
       grants:
-        - username: arcloud_dashboards
-          scopes:
-            - table: cloud_maps
-              privileges: ["SELECT"]
-            - table: device_states
-              privileges: ["SELECT"]
-            - table: mapping_jobs
-              privileges: ["SELECT"]
-            - table: persistent_pose_mappings
-              privileges: ["SELECT"]
-            - table: persistent_poses
-              privileges: ["SELECT"]
-            - table: posed_sensor_data
-              privileges: ["SELECT"]
-            - table: sessions
-              privileges: ["SELECT"]
-            - table: space_workers
-              privileges: ["SELECT"]
-            - table: spaces
-              privileges: ["SELECT"]
-            - table: spatial_anchors
-              privileges: ["SELECT"]
-            - table: tracking_maps
-              privileges: ["SELECT"]
         - username: events
           scopes:
             - table: events
@@ -843,6 +772,8 @@ migration:
               privileges: ["SELECT"]
         - username: session_manager
           scopes:
+            - table: cloud_maps
+              privileges: ["SELECT"]
             - table: device_states
               privileges: ["SELECT", "INSERT", "UPDATE"]
             - table: sessions
@@ -851,6 +782,8 @@ migration:
               privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"]
             - table: spaces
               privileges: ["SELECT", "INSERT", "UPDATE"]
+            - table: spatial_anchors
+              privileges: ["SELECT"]
         - username: space_proxy
           scopes:
             - table: sessions
@@ -983,7 +916,7 @@ streaming:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
-      tag: v2.1.3
+      tag: v2.2.2
   log:
     level: DEBUG
   tracing:
@@ -1147,12 +1080,6 @@ enterprise-console-web:
       {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
       {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
       {{- printf "%s://%s%s%s" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
-  arcloudDashboards:
-    url: |-
-      {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
-      {{- $domainPort := (and (eq .Values.global.domainProtocol "https") (eq $domainPort ":443")) | ternary "" $domainPort }}
-      {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
-      {{- printf "%s://%s%s%s/dashboards" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
   service:
     oidcIssuerUrl: |-
       {{- $domainPort := printf ":%s" (.Values.global.domainPort | toString) }}
@@ -1178,42 +1105,10 @@ enterprise-console-web:
       {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
       {{- printf "%s://%s%s%s/auth/realms/magicleap/.well-known/openid-configuration" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
   arcloudBundle:
-    version: 1.45.52
+    version: 1.48.21
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"
       userAuthenticationDisabled: "{{ ((.Values.global.features.userAuthentication).disabled) | default false }}"
       peopleExclusion: "{{ .Values.global.features.peopleExclusion | toString }}"
-      meshPreview: "{{ .Values.global.features.meshPreview | toString }}"
-
-arcloud-dashboards:
-  image:
-    repository: "{{ .Values.global.image.registry }}/arcloud-dashboards"
-  podSecurityContext: *podSecurityContext
-  securityContext: *securityContext
-  imagePullSecrets: *imagePullSecrets
-  annotations: *annotations
-  scuttle: *scuttle
-  kubexit: *kubexit
-  istio:
-    <<: *istio
-    virtualService:
-      enabled: true
-      gateways: *istioGateways
-      http:
-        uriPrefix: /dashboards/
-        port: "{{ .Values.global.istio.gateway.ports.http }}"
-  localRateLimit: *localRateLimit
-  opa: *opa
-  opaIstio: *opa # TODO: Remove after common v6
-  oauth:
-    issuer: "http://keycloak.{{ .Values.global.namespace }}.svc.cluster.local:80/auth/realms/magicleap"
-  postgresql:
-    host: "{{ .Values.global.postgresql.host }}"
-    port: "{{ .Values.global.postgresql.port }}"
-    database: arcloud
-    existingSecret: postgresql-arcloud-dashboards
-  minio:
-    endpoint: "{{ .Values.global.minio.endpoint }}"
-    bucket: "{{ .Values.global.bucket }}"
-    existingSecret: minio-arcloud-dashboards
+      meshingOptions: "{{ .Values.global.features.meshingOptions | toString }}"
