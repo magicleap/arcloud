@@ -1,6 +1,0 @@
-dependencies:
-- name: arcloud-dashboards
-  repository: https://registry.magicleap.io/chartrepo/enterprise/
-  version: 0.14.6
-digest: sha256:d4d4bb898a6dc926ae7b5c0fa4f752ae7eff83e38843dd6a44cba776e1a9f9d4
-generated: "2024-02-15T15:22:12.631492998Z"

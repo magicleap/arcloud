@@ -1,6 +1,6 @@
 dependencies:
 - name: mapping
   repository: https://registry.magicleap.io/chartrepo/connected-services/
-  version: 0.126.5
-digest: sha256:c7bc250f9d2ae299cd8ac61567e1ebf8b82c4308ae47ca2f3f95389948105eb4
-generated: "2024-02-27T16:33:48.21009526Z"
+  version: 0.134.2
+digest: sha256:7f3f49c944e37338fb2630d42fa2082e2dd82bab4b9099a4254e02ce47588b10
+generated: "2024-04-18T12:53:13.07144707Z"
