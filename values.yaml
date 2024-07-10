@@ -4,7 +4,7 @@
 
 global:
   name: ''
-  version: 1.48.21
+  version: 1.48.22
   namespace: arcloud
   domain: localhost
   domainPrefix: ""
@@ -668,7 +668,7 @@ mapping:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
-      tag: v2.2.2
+      tag: v2.2.3
   log:
     level: DEBUG
   imagePullSecrets: *imagePullSecrets
@@ -916,7 +916,7 @@ streaming:
   spiff:
     image:
       repository: "{{ .Values.global.image.registry }}/spiff"
-      tag: v2.2.2
+      tag: v2.2.3
   log:
     level: DEBUG
   tracing:
@@ -1105,7 +1105,7 @@ enterprise-console-web:
       {{- $domainPort := (and (eq .Values.global.domainProtocol "http") (eq $domainPort ":80")) | ternary "" $domainPort }}
       {{- printf "%s://%s%s%s/auth/realms/magicleap/.well-known/openid-configuration" .Values.global.domainProtocol .Values.global.domainPrefix .Values.global.domain $domainPort -}}
   arcloudBundle:
-    version: 1.48.21
+    version: 1.48.22
     features:
       mapMerge: "{{ .Values.global.features.mapMerge | toString }}"
       spaceMeshing: "{{ .Values.global.features.spaceMeshing | toString }}"
